@@ -1,0 +1,19 @@
+# 환경변수
+.env
+
+# 의존성
+node_modules/
+
+# 빌드 출력
+dist/
+
+# 업로드/임시 파일
+server/uploads/
+server/temp/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

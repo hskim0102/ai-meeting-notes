@@ -1,19 +1,184 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionItemRow from '../components/ActionItemRow.vue'
-import { meetings } from '../data/mockData.js'
+import { fetchMeeting, updateMeeting, sendMeetingEmail } from '../services/api.js'
+import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const route = useRoute()
 const router = useRouter()
 const activeTab = ref('summary')
+const meetingData = ref(null)
+const loading = ref(true)
 
-const meeting = computed(() => {
-  return meetings.find(m => m.id === Number(route.params.id))
+// ── 편집 모드 상태 ──
+const isEditing = ref(false)
+const saving = ref(false)
+const toast = ref({ show: false, message: '', type: 'success' })
+
+// 편집용 임시 데이터 (원본 보존)
+const editData = reactive({
+  aiSummary: '',
+  keyDecisions: [],
+  actionItems: [],
+  tags: [],
+})
+const newTagInput = ref('')
+const newDecisionInput = ref('')
+
+// ── 메일 발송 모달 상태 ──
+const showEmailModal = ref(false)
+const sendingEmail = ref(false)
+const emailForm = reactive({
+  subject: '',
+  recipients: [],       // { name, email, checked }
+  additionalEmail: '',
+  additionalList: [],    // 추가 입력한 이메일
 })
 
-const toggleItem = (item) => {
-  item.done = !item.done
+onMounted(async () => {
+  try {
+    const res = await fetchMeeting(route.params.id)
+    if (res.success) meetingData.value = res.data
+  } catch (err) {
+    console.warn('[회의 상세] DB 조회 실패, Mock 데이터 사용:', err.message)
+    meetingData.value = fallbackMeetings.find(m => m.id === Number(route.params.id)) || null
+  } finally {
+    loading.value = false
+  }
+})
+
+const meeting = computed(() => meetingData.value)
+
+// ── 편집 진입/취소 ──
+function startEditing() {
+  const m = meeting.value
+  editData.aiSummary = m.aiSummary || ''
+  editData.keyDecisions = [...(m.keyDecisions || [])]
+  editData.actionItems = (m.actionItems || []).map(item => ({ ...item }))
+  editData.tags = [...(m.tags || [])]
+  newTagInput.value = ''
+  newDecisionInput.value = ''
+  isEditing.value = true
+}
+
+function cancelEditing() {
+  isEditing.value = false
+}
+
+// ── DB 저장 ──
+async function saveChanges() {
+  saving.value = true
+  try {
+    const res = await updateMeeting(meeting.value.id, {
+      aiSummary: editData.aiSummary,
+      keyDecisions: editData.keyDecisions,
+      actionItems: editData.actionItems,
+      tags: editData.tags,
+    })
+    if (res.success) {
+      meetingData.value = res.data
+      isEditing.value = false
+      showToast('저장 완료', 'success')
+    }
+  } catch (err) {
+    showToast('저장 실패: ' + err.message, 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+// ── 태그 편집 ──
+function addTag() {
+  const tag = newTagInput.value.trim()
+  if (tag && !editData.tags.includes(tag)) {
+    editData.tags.push(tag)
+  }
+  newTagInput.value = ''
+}
+function removeTag(idx) {
+  editData.tags.splice(idx, 1)
+}
+
+// ── 결정사항 편집 ──
+function addDecision() {
+  const text = newDecisionInput.value.trim()
+  if (text) {
+    editData.keyDecisions.push(text)
+    newDecisionInput.value = ''
+  }
+}
+function removeDecision(idx) {
+  editData.keyDecisions.splice(idx, 1)
+}
+
+// ── 액션 아이템 편집 ──
+function addActionItem() {
+  editData.actionItems.push({ text: '', assignee: '', dueDate: '', done: false })
+}
+function removeActionItem(idx) {
+  editData.actionItems.splice(idx, 1)
+}
+
+// ── 토글 (뷰 모드) ──
+const toggleItem = (item) => { item.done = !item.done }
+
+// ── 메일 발송 모달 열기 ──
+function openEmailModal() {
+  const m = meeting.value
+  emailForm.subject = `[회의록] ${m.title} - ${m.date}`
+  emailForm.recipients = (m.participants || []).map(name => ({
+    name,
+    email: '',
+    checked: true,
+  }))
+  emailForm.additionalEmail = ''
+  emailForm.additionalList = []
+  showEmailModal.value = true
+}
+
+function addAdditionalEmail() {
+  const email = emailForm.additionalEmail.trim()
+  if (email && !emailForm.additionalList.includes(email)) {
+    emailForm.additionalList.push(email)
+  }
+  emailForm.additionalEmail = ''
+}
+function removeAdditionalEmail(idx) {
+  emailForm.additionalList.splice(idx, 1)
+}
+
+async function submitEmail() {
+  sendingEmail.value = true
+  try {
+    const recipients = emailForm.recipients
+      .filter(r => r.checked)
+      .map(r => r.email || `${r.name}@company.com`)
+    const additionalRecipients = emailForm.additionalList
+
+    const res = await sendMeetingEmail(meeting.value.id, {
+      recipients,
+      additionalRecipients,
+      subject: emailForm.subject,
+    })
+
+    showEmailModal.value = false
+    if (res.data?.preview) {
+      showToast('SMTP 미설정 — 프리뷰만 생성됨 (.env에 SMTP_HOST 설정 필요)', 'warning')
+    } else {
+      showToast('메일 발송 완료', 'success')
+    }
+  } catch (err) {
+    showToast('메일 발송 실패: ' + err.message, 'error')
+  } finally {
+    sendingEmail.value = false
+  }
+}
+
+// ── 유틸 ──
+function showToast(message, type = 'success') {
+  toast.value = { show: true, message, type }
+  setTimeout(() => { toast.value.show = false }, 3000)
 }
 
 const formatDuration = (min) => {
@@ -33,6 +198,25 @@ const sentimentColor = computed(() => {
 </script>
 
 <template>
+  <!-- 토스트 알림 -->
+  <Teleport to="body">
+    <Transition name="toast">
+      <div
+        v-if="toast.show"
+        class="fixed top-6 right-6 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2"
+        :class="{
+          'bg-success-500 text-white': toast.type === 'success',
+          'bg-danger-500 text-white': toast.type === 'error',
+          'bg-warning-500 text-white': toast.type === 'warning',
+        }"
+      >
+        <svg v-if="toast.type === 'success'" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+        <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+        {{ toast.message }}
+      </div>
+    </Transition>
+  </Teleport>
+
   <div class="p-8" v-if="meeting">
     <!-- Back button -->
     <button @click="router.back()" class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors">
@@ -45,9 +229,28 @@ const sentimentColor = computed(() => {
     <!-- Header -->
     <div class="mb-8">
       <div class="flex items-center gap-2 mb-2">
-        <span v-for="tag in meeting.tags" :key="tag" class="text-xs px-2.5 py-1 rounded-full bg-primary-50 text-primary-600 font-medium">
-          {{ tag }}
-        </span>
+        <!-- 뷰 모드 태그 -->
+        <template v-if="!isEditing">
+          <span v-for="tag in meeting.tags" :key="tag" class="text-xs px-2.5 py-1 rounded-full bg-primary-50 text-primary-600 font-medium">
+            {{ tag }}
+          </span>
+        </template>
+        <!-- 편집 모드 태그 -->
+        <template v-else>
+          <span v-for="(tag, idx) in editData.tags" :key="idx" class="text-xs px-2.5 py-1 rounded-full bg-primary-50 text-primary-600 font-medium flex items-center gap-1">
+            {{ tag }}
+            <button @click="removeTag(idx)" class="hover:text-danger-500 transition-colors">&times;</button>
+          </span>
+          <div class="flex items-center gap-1">
+            <input
+              v-model="newTagInput"
+              @keyup.enter="addTag"
+              type="text"
+              placeholder="태그 추가..."
+              class="text-xs px-2 py-1 border border-slate-200 rounded-full w-24 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            />
+          </div>
+        </template>
         <span
           class="text-xs px-2.5 py-1 rounded-full font-medium"
           :class="meeting.status === 'completed' ? 'bg-success-50 text-success-600' : 'bg-primary-50 text-primary-600'"
@@ -88,6 +291,42 @@ const sentimentColor = computed(() => {
       </div>
     </div>
 
+    <!-- 액션 버튼 바 -->
+    <div class="flex items-center gap-2 mb-6">
+      <template v-if="!isEditing">
+        <button
+          @click="startEditing"
+          class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-600"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+          편집
+        </button>
+      </template>
+      <template v-else>
+        <button
+          @click="saveChanges"
+          :disabled="saving"
+          class="px-4 py-2 text-sm font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+          {{ saving ? '저장 중...' : '저장' }}
+        </button>
+        <button
+          @click="cancelEditing"
+          class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-slate-600"
+        >
+          취소
+        </button>
+      </template>
+      <button
+        @click="openEmailModal"
+        class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-600 ml-auto"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+        메일 발송
+      </button>
+    </div>
+
     <!-- Tabs -->
     <div class="border-b border-slate-200 mb-6">
       <div class="flex gap-6">
@@ -109,6 +348,7 @@ const sentimentColor = computed(() => {
 
     <!-- Tab Content: AI Summary -->
     <div v-if="activeTab === 'summary'" class="space-y-6">
+      <!-- AI 요약 -->
       <div class="bg-white rounded-xl border border-slate-200 p-6">
         <div class="flex items-center gap-2 mb-4">
           <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -116,12 +356,22 @@ const sentimentColor = computed(() => {
           </svg>
           <h3 class="text-base font-semibold text-slate-900">AI 요약</h3>
         </div>
-        <p class="text-sm text-slate-600 leading-relaxed">{{ meeting.aiSummary }}</p>
+        <!-- 뷰 모드 -->
+        <p v-if="!isEditing" class="text-sm text-slate-600 leading-relaxed">{{ meeting.aiSummary }}</p>
+        <!-- 편집 모드 -->
+        <textarea
+          v-else
+          v-model="editData.aiSummary"
+          rows="5"
+          class="w-full text-sm text-slate-600 leading-relaxed border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y"
+        ></textarea>
       </div>
 
+      <!-- 주요 결정 사항 -->
       <div class="bg-white rounded-xl border border-slate-200 p-6">
         <h3 class="text-base font-semibold text-slate-900 mb-4">주요 결정 사항</h3>
-        <ul class="space-y-3">
+        <!-- 뷰 모드 -->
+        <ul v-if="!isEditing" class="space-y-3">
           <li v-for="(decision, i) in meeting.keyDecisions" :key="i" class="flex items-start gap-3">
             <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
               {{ i + 1 }}
@@ -129,6 +379,32 @@ const sentimentColor = computed(() => {
             <p class="text-sm text-slate-700">{{ decision }}</p>
           </li>
         </ul>
+        <!-- 편집 모드 -->
+        <div v-else class="space-y-2">
+          <div v-for="(decision, i) in editData.keyDecisions" :key="i" class="flex items-start gap-2">
+            <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-1">
+              {{ i + 1 }}
+            </div>
+            <input
+              v-model="editData.keyDecisions[i]"
+              type="text"
+              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <button @click="removeDecision(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <input
+              v-model="newDecisionInput"
+              @keyup.enter="addDecision"
+              type="text"
+              placeholder="새 결정사항 추가..."
+              class="flex-1 text-sm border border-dashed border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <button @click="addDecision" class="text-primary-500 hover:text-primary-700 text-sm font-medium">추가</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -139,24 +415,67 @@ const sentimentColor = computed(() => {
           <div class="flex items-center justify-between">
             <h3 class="text-base font-semibold text-slate-900">액션 아이템</h3>
             <span class="text-xs text-slate-400">
-              {{ meeting.actionItems.filter(a => a.done).length }}/{{ meeting.actionItems.length }} 완료
+              {{ (isEditing ? editData.actionItems : meeting.actionItems).filter(a => a.done).length }}/{{ (isEditing ? editData.actionItems : meeting.actionItems).length }} 완료
             </span>
           </div>
           <!-- Progress bar -->
           <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div
               class="h-full bg-success-500 rounded-full transition-all duration-300"
-              :style="{ width: meeting.actionItems.length ? `${(meeting.actionItems.filter(a => a.done).length / meeting.actionItems.length * 100)}%` : '0%' }"
+              :style="{ width: (() => { const items = isEditing ? editData.actionItems : meeting.actionItems; return items.length ? `${(items.filter(a => a.done).length / items.length * 100)}%` : '0%' })() }"
             ></div>
           </div>
         </div>
-        <div class="divide-y divide-slate-50">
+        <!-- 뷰 모드 -->
+        <div v-if="!isEditing" class="divide-y divide-slate-50">
           <ActionItemRow
             v-for="(item, i) in meeting.actionItems"
             :key="i"
             :item="item"
             @toggle="toggleItem"
           />
+        </div>
+        <!-- 편집 모드 -->
+        <div v-else class="p-4 space-y-3">
+          <div v-for="(item, i) in editData.actionItems" :key="i" class="bg-slate-50 rounded-lg p-3">
+            <div class="flex items-start gap-2">
+              <button
+                @click="item.done = !item.done"
+                class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                :class="item.done ? 'bg-success-500 border-success-500' : 'border-slate-300 hover:border-primary-400'"
+              >
+                <svg v-if="item.done" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </button>
+              <input
+                v-model="item.text"
+                type="text"
+                placeholder="액션 아이템 내용"
+                class="flex-1 text-sm border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <button @click="removeActionItem(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div class="flex gap-2 mt-2 ml-7">
+              <input
+                v-model="item.assignee"
+                type="text"
+                placeholder="담당자"
+                class="text-xs border border-slate-200 rounded px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+              <input
+                v-model="item.dueDate"
+                type="date"
+                class="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <button
+            @click="addActionItem"
+            class="w-full py-2 text-sm text-primary-500 hover:text-primary-700 border border-dashed border-slate-300 rounded-lg hover:border-primary-300 transition-colors"
+          >
+            + 액션 아이템 추가
+          </button>
         </div>
       </div>
     </div>
@@ -189,10 +508,129 @@ const sentimentColor = computed(() => {
   </div>
 
   <!-- Not found -->
-  <div v-else class="p-8 text-center py-20">
+  <div v-else-if="!loading" class="p-8 text-center py-20">
     <p class="text-slate-400">회의를 찾을 수 없습니다</p>
     <router-link to="/meetings" class="text-sm text-primary-500 hover:text-primary-600 mt-2 inline-block">
       목록으로 돌아가기
     </router-link>
   </div>
+
+  <!-- 메일 발송 모달 -->
+  <Teleport to="body">
+    <div v-if="showEmailModal" class="fixed inset-0 z-40 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="showEmailModal = false"></div>
+      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-6">
+            <svg class="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+            <h2 class="text-lg font-semibold text-slate-900">회의록 메일 발송</h2>
+          </div>
+
+          <!-- 메일 제목 -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-500 mb-1">메일 제목</label>
+            <input
+              v-model="emailForm.subject"
+              type="text"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <!-- 수신자 (참석자) -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-500 mb-2">수신자</label>
+            <div class="space-y-2">
+              <label
+                v-for="(r, i) in emailForm.recipients"
+                :key="i"
+                class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
+              >
+                <input type="checkbox" v-model="r.checked" class="rounded border-slate-300 text-primary-500 focus:ring-primary-500" />
+                <span>{{ r.name }}</span>
+                <input
+                  v-model="r.email"
+                  type="email"
+                  :placeholder="`${r.name}@company.com`"
+                  class="ml-auto text-xs border border-slate-200 rounded px-2 py-1 w-48 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+            </div>
+          </div>
+
+          <!-- 추가 수신자 -->
+          <div class="mb-4">
+            <label class="block text-xs font-medium text-slate-500 mb-1">추가 수신자</label>
+            <div class="flex gap-2">
+              <input
+                v-model="emailForm.additionalEmail"
+                @keyup.enter="addAdditionalEmail"
+                type="email"
+                placeholder="email@example.com"
+                class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button @click="addAdditionalEmail" class="px-3 py-2 text-sm font-medium text-primary-500 border border-slate-200 rounded-lg hover:bg-slate-50">추가</button>
+            </div>
+            <div v-if="emailForm.additionalList.length" class="flex flex-wrap gap-1.5 mt-2">
+              <span
+                v-for="(email, idx) in emailForm.additionalList"
+                :key="idx"
+                class="flex items-center gap-1 text-xs bg-slate-100 rounded-full px-2.5 py-1"
+              >
+                {{ email }}
+                <button @click="removeAdditionalEmail(idx)" class="text-slate-400 hover:text-danger-500">&times;</button>
+              </span>
+            </div>
+          </div>
+
+          <!-- 미리보기 -->
+          <div class="mb-6">
+            <label class="block text-xs font-medium text-slate-500 mb-2">미리보기</label>
+            <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 max-h-48 overflow-y-auto text-sm text-slate-600 space-y-2">
+              <p class="font-medium text-slate-800">{{ meeting.title }}</p>
+              <p class="text-xs text-slate-400">{{ meeting.date }} {{ meeting.time }} · {{ meeting.participants?.join(', ') }}</p>
+              <hr class="border-slate-200">
+              <div>
+                <p class="text-xs font-semibold text-slate-500 mb-1">요약</p>
+                <p class="text-xs">{{ meeting.aiSummary || '(요약 없음)' }}</p>
+              </div>
+              <div v-if="meeting.keyDecisions?.length">
+                <p class="text-xs font-semibold text-slate-500 mb-1">결정사항</p>
+                <ol class="text-xs list-decimal list-inside">
+                  <li v-for="(d, i) in meeting.keyDecisions" :key="i">{{ d }}</li>
+                </ol>
+              </div>
+              <div v-if="meeting.actionItems?.length">
+                <p class="text-xs font-semibold text-slate-500 mb-1">액션 아이템</p>
+                <ul class="text-xs space-y-0.5">
+                  <li v-for="(item, i) in meeting.actionItems" :key="i">
+                    {{ item.done ? '✅' : '◻️' }} {{ item.text }} ({{ item.assignee }}, ~{{ item.dueDate }})
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- 버튼 -->
+          <div class="flex justify-end gap-2">
+            <button @click="showEmailModal = false" class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">취소</button>
+            <button
+              @click="submitEmail"
+              :disabled="sendingEmail"
+              class="px-4 py-2 text-sm font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
+              {{ sendingEmail ? '발송 중...' : '발송하기' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
+
+<style scoped>
+.toast-enter-active { animation: toast-in 0.3s ease-out; }
+.toast-leave-active { animation: toast-out 0.3s ease-in; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-12px); } }
+</style>

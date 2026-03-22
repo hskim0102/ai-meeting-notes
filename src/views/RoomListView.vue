@@ -1,17 +1,30 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { rooms, reservations } from '../data/mockData.js'
+import { rooms as fallbackRooms, reservations as fallbackReservations } from '../data/mockData.js'
 
 const router = useRouter()
 const filterCapacity = ref('all')
+const rooms = ref([...fallbackRooms])
+const reservations = ref([...fallbackReservations])
 
 // 오늘 날짜
 const today = new Date().toISOString().slice(0, 10)
 
+onMounted(async () => {
+  try {
+    const [roomsRes, rsvRes] = await Promise.all([
+      fetch('/api/rooms').then(r => r.json()),
+      fetch(`/api/rooms/reservations/list?date=${today}`).then(r => r.json()),
+    ])
+    if (roomsRes.success) rooms.value = roomsRes.data
+    if (rsvRes.success) reservations.value = rsvRes.data
+  } catch { /* fallback to mock */ }
+})
+
 // 각 회의실의 현재 예약 건수 계산
 function getTodayReservations(roomId) {
-  return reservations.filter(r => r.roomId === roomId && r.date === today)
+  return reservations.value.filter(r => r.roomId === roomId && r.date === today)
 }
 
 function getNextReservation(roomId) {
@@ -30,11 +43,11 @@ function isCurrentlyInUse(roomId) {
 }
 
 const filteredRooms = computed(() => {
-  if (filterCapacity.value === 'all') return rooms
-  if (filterCapacity.value === 'small') return rooms.filter(r => r.capacity <= 6)
-  if (filterCapacity.value === 'medium') return rooms.filter(r => r.capacity > 6 && r.capacity <= 15)
-  if (filterCapacity.value === 'large') return rooms.filter(r => r.capacity > 15)
-  return rooms
+  if (filterCapacity.value === 'all') return rooms.value
+  if (filterCapacity.value === 'small') return rooms.value.filter(r => r.capacity <= 6)
+  if (filterCapacity.value === 'medium') return rooms.value.filter(r => r.capacity > 6 && r.capacity <= 15)
+  if (filterCapacity.value === 'large') return rooms.value.filter(r => r.capacity > 15)
+  return rooms.value
 })
 
 const statusLabel = (room) => {

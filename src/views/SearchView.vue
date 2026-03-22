@@ -1,10 +1,16 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { meetings } from '../data/mockData.js'
+import { searchMeetings } from '../services/api.js'
+import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const route = useRoute()
 const router = useRouter()
+
+// 전체 회의 데이터 (DB 또는 fallback)
+const meetings = ref([...fallbackMeetings])
+const useServerSearch = ref(false)
+const serverResults = ref([])
 
 // 검색 상태
 const searchQuery = ref(route.query.q || '')
@@ -15,9 +21,21 @@ const selectedTag = ref(route.query.tag || '')
 const sortBy = ref(route.query.sort || 'relevance')
 const showAdvanced = ref(false)
 
+// DB에서 회의 데이터 로드
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/meetings')
+    const data = await res.json()
+    if (data.success && data.data.length > 0) {
+      meetings.value = data.data
+      useServerSearch.value = true
+    }
+  } catch { /* fallback to mock */ }
+})
+
 // 전체 참석자 / 태그 목록 추출
-const allParticipants = [...new Set(meetings.flatMap(m => m.participants))].sort()
-const allTags = [...new Set(meetings.flatMap(m => m.tags))].sort()
+const allParticipants = computed(() => [...new Set(meetings.value.flatMap(m => m.participants || []))].sort())
+const allTags = computed(() => [...new Set(meetings.value.flatMap(m => m.tags || []))].sort())
 
 // 가중치 상수
 const WEIGHTS = { title: 3.0, tags: 2.5, aiSummary: 2.0, actionItems: 1.5, participants: 1.5, transcript: 1.0 }
@@ -49,7 +67,7 @@ const searchResults = computed(() => {
   const q = searchQuery.value.trim()
   if (!q && !dateFrom.value && !dateTo.value && !selectedParticipant.value && !selectedTag.value) return []
 
-  let results = meetings.map(meeting => {
+  let results = meetings.value.map(meeting => {
     let score = 0
     const snippets = []
 

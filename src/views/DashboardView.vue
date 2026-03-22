@@ -1,12 +1,38 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import StatCard from '../components/StatCard.vue'
 import MeetingCard from '../components/MeetingCard.vue'
 import ActionItemRow from '../components/ActionItemRow.vue'
-import { meetings, stats, upcomingMeetings, recentActionItems } from '../data/mockData.js'
+import { fetchMeetings, fetchMeetingStats } from '../services/api.js'
+import { meetings as fallbackMeetings, stats as fallbackStats, upcomingMeetings as fallbackUpcoming, recentActionItems as fallbackActions } from '../data/mockData.js'
 
-const actionItems = ref([...recentActionItems])
-const recentMeetings = meetings.filter(m => m.status === 'completed').slice(0, 3)
+const stats = ref({ ...fallbackStats })
+const recentMeetings = ref(fallbackMeetings.filter(m => m.status === 'completed').slice(0, 3))
+const actionItems = ref([...fallbackActions])
+const allMeetings = ref([...fallbackMeetings])
+
+onMounted(async () => {
+  try {
+    const [meetingsRes, statsRes] = await Promise.all([
+      fetchMeetings(),
+      fetchMeetingStats(),
+    ])
+    if (meetingsRes.success) {
+      allMeetings.value = meetingsRes.data
+      recentMeetings.value = meetingsRes.data.filter(m => m.status === 'completed').slice(0, 3)
+      // 액션 아이템 추출
+      const items = meetingsRes.data.flatMap(m =>
+        (m.actionItems || []).map(a => ({ ...a, meetingTitle: m.title, meetingId: m.id }))
+      )
+      actionItems.value = items.filter(a => !a.done).slice(0, 5)
+    }
+    if (statsRes.success) {
+      stats.value = statsRes.data
+    }
+  } catch (err) {
+    console.warn('[대시보드] DB 조회 실패, Mock 데이터 사용:', err.message)
+  }
+})
 
 const toggleItem = (item) => {
   item.done = !item.done
@@ -67,7 +93,7 @@ const toggleItem = (item) => {
         </div>
 
         <!-- Live Meeting Banner -->
-        <div v-if="meetings.find(m => m.status === 'in-progress')" class="mt-4 bg-primary-50 border border-primary-200 rounded-xl p-4">
+        <div v-if="allMeetings.find(m => m.status === 'in-progress')" class="mt-4 bg-primary-50 border border-primary-200 rounded-xl p-4">
           <div class="flex items-center gap-3">
             <div class="relative">
               <div class="w-3 h-3 bg-primary-500 rounded-full"></div>
@@ -75,10 +101,10 @@ const toggleItem = (item) => {
             </div>
             <div class="flex-1">
               <p class="text-sm font-semibold text-primary-900">진행 중인 회의</p>
-              <p class="text-xs text-primary-600">{{ meetings.find(m => m.status === 'in-progress').title }}</p>
+              <p class="text-xs text-primary-600">{{ allMeetings.find(m => m.status === 'in-progress').title }}</p>
             </div>
             <router-link
-              :to="`/meetings/${meetings.find(m => m.status === 'in-progress').id}`"
+              :to="`/meetings/${allMeetings.find(m => m.status === 'in-progress').id}`"
               class="text-xs px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium"
             >
               실시간 보기

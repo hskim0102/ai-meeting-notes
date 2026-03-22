@@ -1,14 +1,25 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import MeetingCard from '../components/MeetingCard.vue'
-import { meetings } from '../data/mockData.js'
+import { fetchMeetings } from '../services/api.js'
+import { meetings as fallbackMeetings } from '../data/mockData.js'
 
+const meetings = ref([...fallbackMeetings])
 const searchQuery = ref('')
 const filterStatus = ref('all')
 
+onMounted(async () => {
+  try {
+    const res = await fetchMeetings()
+    if (res.success) meetings.value = res.data
+  } catch (err) {
+    console.warn('[회의 목록] DB 조회 실패, Mock 데이터 사용:', err.message)
+  }
+})
+
 const filteredMeetings = computed(() => {
-  return meetings.filter(m => {
-    const matchSearch = !searchQuery.value || m.title.includes(searchQuery.value) || m.tags.some(t => t.includes(searchQuery.value))
+  return meetings.value.filter(m => {
+    const matchSearch = !searchQuery.value || m.title.includes(searchQuery.value) || (m.tags || []).some(t => t.includes(searchQuery.value))
     const matchStatus = filterStatus.value === 'all' || m.status === filterStatus.value
     return matchSearch && matchStatus
   })
@@ -20,7 +31,7 @@ const filteredMeetings = computed(() => {
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">회의 목록</h1>
-        <p class="text-sm text-slate-500 mt-1">전체 {{ meetings.length }}개의 회의</p>
+        <p class="text-sm text-slate-500 mt-1">전체 {{ meetings.length }}개의 회의</p> <!-- meetings is now a ref -->
       </div>
     </div>
 

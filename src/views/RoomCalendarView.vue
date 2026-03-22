@@ -1,9 +1,28 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { rooms, reservations as initialReservations } from '../data/mockData.js'
+import { ref, computed, onMounted, watch } from 'vue'
+import { rooms as fallbackRooms, reservations as fallbackReservations } from '../data/mockData.js'
 
-// 예약 데이터 (반응형으로 관리 — 로컬 CRUD 지원)
-const allReservations = ref([...initialReservations])
+// 반응형 데이터
+const rooms = ref([...fallbackRooms])
+const allReservations = ref([...fallbackReservations])
+
+// DB에서 데이터 로드
+onMounted(async () => {
+  try {
+    const roomsRes = await fetch('/api/rooms').then(r => r.json())
+    if (roomsRes.success) rooms.value = roomsRes.data
+  } catch { /* fallback */ }
+  await loadReservations()
+})
+
+async function loadReservations() {
+  try {
+    const weekStart = weekDays.value[0]?.date
+    if (!weekStart) return
+    const res = await fetch(`/api/rooms/reservations/list?weekStart=${weekStart}`).then(r => r.json())
+    if (res.success) allReservations.value = res.data
+  } catch { /* fallback */ }
+}
 
 // 현재 선택된 주의 시작일 (월요일)
 const getMonday = (d) => {
@@ -101,16 +120,19 @@ function getRoomColor(roomId) {
 }
 
 function getRoomName(roomId) {
-  return rooms.find(r => r.id === roomId)?.name || roomId
+  return rooms.value.find(r => r.id === roomId)?.name || roomId
 }
 
 // 표시할 회의실 목록
 const displayRooms = computed(() => {
-  if (selectedRoom.value === 'all') return rooms.filter(r => r.status !== 'maintenance')
-  return rooms.filter(r => r.id === selectedRoom.value)
+  if (selectedRoom.value === 'all') return rooms.value.filter(r => r.status !== 'maintenance')
+  return rooms.value.filter(r => r.id === selectedRoom.value)
 })
 
 // 주 이동
+// 주 변경 시 예약 재로드
+watch(currentWeekStart, () => loadReservations())
+
 function prevWeek() {
   const d = new Date(currentWeekStart.value)
   d.setDate(d.getDate() - 7)
@@ -132,7 +154,7 @@ function openCreateModal(date, startTime, roomId) {
   modalMode.value = 'create'
   modalError.value = ''
   newReservation.value = {
-    roomId: roomId || displayRooms.value[0]?.id || '',
+    roomId: roomId || (displayRooms.value[0]?.id ?? ''),
     title: '',
     date: date || weekDays.value[0].date,
     startTime: startTime || '09:00',
@@ -155,7 +177,7 @@ function closeModal() {
   modalError.value = ''
 }
 
-function submitReservation() {
+async function submitReservation() {
   const r = newReservation.value
   if (!r.title.trim()) { modalError.value = '회의 주제를 입력하세요.'; return }
   if (!r.roomId) { modalError.value = '회의실을 선택하세요.'; return }
@@ -172,8 +194,7 @@ function submitReservation() {
 
   if (hasConflict) { modalError.value = '해당 시간에 이미 예약이 있습니다.'; return }
 
-  allReservations.value.push({
-    id: `rsv-${Date.now()}`,
+  const newRsv = {
     roomId: r.roomId,
     title: r.title.trim(),
     date: r.date,
@@ -181,13 +202,33 @@ function submitReservation() {
     endTime: r.endTime,
     organizer: r.organizer,
     participants: r.participants ? r.participants.split(',').map(p => p.trim()) : [],
-    status: 'confirmed',
-  })
+  }
+
+  try {
+    const res = await fetch('/api/rooms/reservations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRsv),
+    })
+    const data = await res.json()
+    if (data.success) {
+      allReservations.value.push(data.data)
+    } else {
+      modalError.value = data.error || '예약 생성 실패'
+      return
+    }
+  } catch {
+    // DB 실패 시 로컬에만 추가
+    allReservations.value.push({ id: `rsv-${Date.now()}`, ...newRsv, status: 'confirmed' })
+  }
 
   closeModal()
 }
 
-function cancelReservation(id) {
+async function cancelReservation(id) {
+  try {
+    await fetch(`/api/rooms/reservations/${id}`, { method: 'DELETE' })
+  } catch { /* ignore */ }
   const idx = allReservations.value.findIndex(r => r.id === id)
   if (idx !== -1) allReservations.value.splice(idx, 1)
   closeModal()

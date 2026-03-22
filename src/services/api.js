@@ -77,6 +77,100 @@ export async function checkServerHealth() {
 }
 
 // ─────────────────────────────────────────────────
+// 회의 CRUD API
+// ─────────────────────────────────────────────────
+
+/**
+ * 회의 목록 조회 (DB)
+ */
+export async function fetchMeetings(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query.set(key, value)
+  }
+  const res = await fetch(`${API_BASE}/meetings?${query}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의 목록 조회 실패')
+  return data
+}
+
+/**
+ * 회의 상세 조회 (DB)
+ */
+export async function fetchMeeting(id) {
+  const res = await fetch(`${API_BASE}/meetings/${id}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의 조회 실패')
+  return data
+}
+
+/**
+ * 회의 생성 (DB 저장)
+ */
+export async function createMeeting(meeting) {
+  const res = await fetch(`${API_BASE}/meetings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meeting),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의 생성 실패')
+  return data
+}
+
+/**
+ * 대시보드 통계 조회 (DB)
+ */
+export async function fetchMeetingStats() {
+  const res = await fetch(`${API_BASE}/meetings/stats`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '통계 조회 실패')
+  return data
+}
+
+/**
+ * 액션 아이템 토글
+ */
+export async function toggleActionItem(meetingId, itemIndex) {
+  const res = await fetch(`${API_BASE}/meetings/${meetingId}/action-items/${itemIndex}`, {
+    method: 'PATCH',
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '액션 아이템 수정 실패')
+  return data
+}
+
+/**
+ * 회의 수정 (DB 저장)
+ */
+export async function updateMeeting(id, meeting) {
+  const res = await fetch(`${API_BASE}/meetings/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meeting),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의 수정 실패')
+  return data
+}
+
+/**
+ * 회의록 메일 발송
+ * @param {number|string} id - 회의 ID
+ * @param {object} payload - { recipients: [...], additionalRecipients: [...], subject: string }
+ */
+export async function sendMeetingEmail(id, payload) {
+  const res = await fetch(`${API_BASE}/meetings/${id}/send-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '메일 발송 실패')
+  return data
+}
+
+// ─────────────────────────────────────────────────
 // 회의 검색 API
 // ─────────────────────────────────────────────────
 

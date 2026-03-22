@@ -1,8 +1,11 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AudioUploader from '../components/AudioUploader.vue'
 import LiveRecorder from '../components/LiveRecorder.vue'
-import { summarizeTranscript } from '../services/api.js'
+import { summarizeTranscript, createMeeting } from '../services/api.js'
+
+const router = useRouter()
 
 // 입력 모드: 'record' (실시간 녹음) | 'upload' (파일 업로드)
 const inputMode = ref('record')
@@ -17,10 +20,28 @@ const summaryResult = ref(null)
 const isSummarizing = ref(false)
 const summaryError = ref('')
 
+// ── DB 저장 관련 상태 ──
+const saveForm = ref({
+  title: '',
+  participants: '',
+  date: new Date().toISOString().slice(0, 10),
+  time: new Date().toTimeString().slice(0, 5),
+  duration: 0,
+})
+const isSaving = ref(false)
+const saveError = ref('')
+const toast = ref({ show: false, message: '', type: 'success' })
+
 function onTranscribed(data) {
   transcriptResult.value = data
   summaryResult.value = null
   summaryError.value = ''
+  saveError.value = ''
+
+  // STT 메타에서 소요 시간 자동 설정 (초 → 분)
+  if (data?.meta?.totalDuration) {
+    saveForm.value.duration = Math.round(data.meta.totalDuration / 60)
+  }
 }
 
 async function requestSummary() {
@@ -43,6 +64,74 @@ async function requestSummary() {
   }
 }
 
+// ── DB 저장 ──
+async function saveToDb() {
+  const title = saveForm.value.title.trim()
+  if (!title) {
+    saveError.value = '회의 제목을 입력해주세요.'
+    return
+  }
+
+  isSaving.value = true
+  saveError.value = ''
+
+  try {
+    // 참석자 문자열 → 배열
+    const participants = saveForm.value.participants
+      .split(',')
+      .map(p => p.trim())
+      .filter(Boolean)
+
+    // STT segments → transcript 배열 변환
+    const transcript = (transcriptResult.value?.segments || []).map(seg => ({
+      speaker: '화자',
+      time: formatTime(seg.start),
+      text: seg.text,
+    }))
+
+    const meetingData = {
+      title,
+      date: saveForm.value.date,
+      time: saveForm.value.time,
+      duration: saveForm.value.duration || 0,
+      participants,
+      status: 'completed',
+      tags: summaryResult.value?.keywords || [],
+      aiSummary: summaryResult.value?.summary || '',
+      keyDecisions: summaryResult.value?.keyDecisions || [],
+      actionItems: (summaryResult.value?.actionItems || []).map(item => ({
+        text: item.text || item.task || '',
+        assignee: item.assignee || '',
+        dueDate: item.dueDate || item.due_date || '',
+        done: false,
+      })),
+      sentiment: summaryResult.value?.sentiment || 'neutral',
+      transcript,
+      fullText: transcriptResult.value?.fullText || '',
+    }
+
+    const res = await createMeeting(meetingData)
+
+    if (res.success) {
+      showToast('회의록이 저장되었습니다.')
+      // 저장된 회의 상세 페이지로 이동
+      setTimeout(() => {
+        router.push(`/meetings/${res.data.id}`)
+      }, 800)
+    }
+  } catch (err) {
+    saveError.value = '저장 실패: ' + err.message
+    showToast('저장에 실패했습니다.', 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+function showToast(message, type = 'success') {
+  toast.value = { show: true, message, type }
+  setTimeout(() => { toast.value.show = false }, 3000)
+}
+
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
@@ -53,10 +142,36 @@ function resetResult() {
   transcriptResult.value = null
   summaryResult.value = null
   summaryError.value = ''
+  saveError.value = ''
+  saveForm.value = {
+    title: '',
+    participants: '',
+    date: new Date().toISOString().slice(0, 10),
+    time: new Date().toTimeString().slice(0, 5),
+    duration: 0,
+  }
 }
 </script>
 
 <template>
+  <!-- 토스트 알림 -->
+  <Teleport to="body">
+    <Transition name="toast">
+      <div
+        v-if="toast.show"
+        class="fixed top-6 right-6 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2"
+        :class="{
+          'bg-success-500 text-white': toast.type === 'success',
+          'bg-danger-500 text-white': toast.type === 'error',
+        }"
+      >
+        <svg v-if="toast.type === 'success'" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+        <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+        {{ toast.message }}
+      </div>
+    </Transition>
+  </Teleport>
+
   <div class="p-8">
     <div class="mb-8">
       <h1 class="text-2xl font-bold text-slate-900">새 회의록 생성</h1>
@@ -244,6 +359,122 @@ function resetResult() {
         </div>
       </template>
 
+      <!-- ════════════════════════════════════════ -->
+      <!-- DB 저장 폼                                -->
+      <!-- ════════════════════════════════════════ -->
+      <div class="bg-white rounded-xl border-2 border-primary-200 p-6">
+        <h3 class="text-base font-semibold text-slate-900 mb-5 flex items-center gap-2">
+          <svg class="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          회의 정보 입력
+        </h3>
+
+        <div class="space-y-4">
+          <!-- 회의 제목 -->
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">회의 제목 <span class="text-danger-500">*</span></label>
+            <input
+              v-model="saveForm.title"
+              type="text"
+              placeholder="예: Q1 사업 전략 회의"
+              class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              :class="saveError && !saveForm.title.trim() ? 'border-danger-300 ring-1 ring-danger-300' : ''"
+            />
+          </div>
+
+          <!-- 참석자 -->
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">참석자 (쉼표로 구분)</label>
+            <input
+              v-model="saveForm.participants"
+              type="text"
+              placeholder="예: 홍길동, 김철수, 이영희"
+              class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+          </div>
+
+          <!-- 날짜 / 시간 / 소요 시간 -->
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">날짜</label>
+              <input
+                v-model="saveForm.date"
+                type="date"
+                class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">시간</label>
+              <input
+                v-model="saveForm.time"
+                type="time"
+                class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">소요 시간 (분)</label>
+              <input
+                v-model.number="saveForm.duration"
+                type="number"
+                min="0"
+                class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          <!-- 자동 포함 항목 요약 -->
+          <div class="bg-slate-50 rounded-lg p-3 space-y-1">
+            <p class="text-xs font-medium text-slate-500 mb-2">자동 포함 항목</p>
+            <p class="text-xs text-slate-600 flex items-center gap-1.5">
+              <span :class="summaryResult?.summary ? 'text-success-500' : 'text-slate-300'">{{ summaryResult?.summary ? '✅' : '◻️' }}</span>
+              AI 요약 (TL;DR)
+            </p>
+            <p class="text-xs text-slate-600 flex items-center gap-1.5">
+              <span :class="summaryResult?.keyDecisions?.length ? 'text-success-500' : 'text-slate-300'">{{ summaryResult?.keyDecisions?.length ? '✅' : '◻️' }}</span>
+              주요 결정사항 {{ summaryResult?.keyDecisions?.length ? `${summaryResult.keyDecisions.length}건` : '' }}
+            </p>
+            <p class="text-xs text-slate-600 flex items-center gap-1.5">
+              <span :class="summaryResult?.actionItems?.length ? 'text-success-500' : 'text-slate-300'">{{ summaryResult?.actionItems?.length ? '✅' : '◻️' }}</span>
+              액션 아이템 {{ summaryResult?.actionItems?.length ? `${summaryResult.actionItems.length}건` : '' }}
+            </p>
+            <p class="text-xs text-slate-600 flex items-center gap-1.5">
+              <span :class="summaryResult?.keywords?.length ? 'text-success-500' : 'text-slate-300'">{{ summaryResult?.keywords?.length ? '✅' : '◻️' }}</span>
+              키워드 태그 {{ summaryResult?.keywords?.length ? `${summaryResult.keywords.length}개` : '' }}
+            </p>
+            <p class="text-xs text-slate-600 flex items-center gap-1.5">
+              <span class="text-success-500">✅</span>
+              전체 텍스트 (Transcript)
+            </p>
+          </div>
+
+          <!-- 에러 메시지 -->
+          <div v-if="saveError" class="text-sm text-danger-500 bg-danger-50 rounded-lg px-3 py-2">
+            {{ saveError }}
+          </div>
+
+          <!-- 저장 버튼 -->
+          <div class="flex justify-end gap-3 pt-2">
+            <button
+              @click="resetResult"
+              class="px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-slate-600"
+            >
+              취소
+            </button>
+            <button
+              @click="saveToDb"
+              :disabled="isSaving"
+              class="px-6 py-2.5 text-sm font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              {{ isSaving ? '저장 중...' : 'DB에 저장하기' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 전체 텍스트 (접이식) -->
       <details class="bg-white rounded-xl border border-slate-200">
         <summary class="p-5 cursor-pointer text-base font-semibold text-slate-900 hover:bg-slate-50 rounded-xl">
@@ -277,3 +508,10 @@ function resetResult() {
     </div>
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active { animation: toast-in 0.3s ease-out; }
+.toast-leave-active { animation: toast-out 0.3s ease-in; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-12px); } }
+</style>

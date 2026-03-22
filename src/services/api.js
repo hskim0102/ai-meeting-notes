@@ -75,3 +75,104 @@ export async function checkServerHealth() {
   const res = await fetch(`${API_BASE}/transcribe/health`)
   return res.json()
 }
+
+// ─────────────────────────────────────────────────
+// 회의 검색 API
+// ─────────────────────────────────────────────────
+
+/**
+ * 회의 통합 검색
+ * @param {object} params - { q, from, to, participants, tags, sort, page }
+ * @returns {Promise<object>} - { success, data: { results, total, page, totalPages } }
+ */
+export async function searchMeetings(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query.set(key, value)
+  }
+  const res = await fetch(`${API_BASE}/search?${query}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '검색 실패')
+  return data
+}
+
+/**
+ * 검색 자동완성 제안
+ * @param {string} q - 검색어
+ * @returns {Promise<object>} - { success, data: [{ type, text, id? }] }
+ */
+export async function searchSuggest(q) {
+  const res = await fetch(`${API_BASE}/search/suggest?q=${encodeURIComponent(q)}`)
+  return res.json()
+}
+
+// ─────────────────────────────────────────────────
+// 회의실 및 예약 API
+// ─────────────────────────────────────────────────
+
+/**
+ * 회의실 목록 조회
+ */
+export async function fetchRooms() {
+  const res = await fetch(`${API_BASE}/rooms`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의실 조회 실패')
+  return data
+}
+
+/**
+ * 회의실 가용성 조회
+ * @param {string} date - 날짜 (YYYY-MM-DD)
+ * @param {string} [startTime] - 시작 시간 (HH:MM)
+ * @param {string} [endTime] - 종료 시간 (HH:MM)
+ */
+export async function fetchRoomAvailability(date, startTime, endTime) {
+  const query = new URLSearchParams({ date })
+  if (startTime) query.set('startTime', startTime)
+  if (endTime) query.set('endTime', endTime)
+  const res = await fetch(`${API_BASE}/rooms/availability?${query}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '가용성 조회 실패')
+  return data
+}
+
+/**
+ * 예약 목록 조회
+ * @param {object} params - { roomId, date, weekStart }
+ */
+export async function fetchReservations(params = {}) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value)
+  }
+  const res = await fetch(`${API_BASE}/rooms/reservations/list?${query}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '예약 조회 실패')
+  return data
+}
+
+/**
+ * 예약 생성
+ * @param {object} reservation - { roomId, title, date, startTime, endTime, organizer, participants }
+ */
+export async function createReservation(reservation) {
+  const res = await fetch(`${API_BASE}/rooms/reservations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(reservation),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '예약 생성 실패')
+  return data
+}
+
+/**
+ * 예약 취소
+ * @param {string} id - 예약 ID
+ */
+export async function cancelReservation(id) {
+  const res = await fetch(`${API_BASE}/rooms/reservations/${id}`, { method: 'DELETE' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '예약 취소 실패')
+  return data
+}

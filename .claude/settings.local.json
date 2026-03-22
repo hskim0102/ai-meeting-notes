@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite:*)",
+      "Bash(node -e \"import\\('./server/routes/rooms.js'\\).then\\(\\(\\) => console.log\\('rooms.js OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\" && node -e \"import\\('./server/routes/search.js'\\).then\\(\\(\\) => console.log\\('search.js OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
+    ]
+  }
+}

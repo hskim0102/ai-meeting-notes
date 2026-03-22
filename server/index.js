@@ -19,6 +19,8 @@ import { fileURLToPath } from 'url'
 
 import transcribeRouter from './routes/transcribe.js'
 import summarizeRouter from './routes/summarize.js'
+import roomsRouter from './routes/rooms.js'
+import searchRouter from './routes/search.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
 const __filename = fileURLToPath(import.meta.url)
@@ -34,7 +36,7 @@ const PORT = process.env.SERVER_PORT || 3001
 // CORS 설정: Vue.js 개발 서버(포트 3000)에서의 요청 허용
 app.use(cors({
   origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type'],
 }))
 
@@ -71,6 +73,12 @@ app.use('/api/transcribe', transcribeRouter)
 // 회의록 AI 요약 엔드포인트
 app.use('/api/summarize', summarizeRouter)
 
+// 회의실 및 예약 관리 엔드포인트
+app.use('/api/rooms', roomsRouter)
+
+// 회의 통합 검색 엔드포인트
+app.use('/api/search', searchRouter)
+
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {
   res.json({
@@ -81,6 +89,12 @@ app.get('/api', (req, res) => {
       'GET /api/transcribe/health': 'STT 서비스 상태 확인',
       'POST /api/summarize': '회의록 텍스트 AI 요약 (Dify)',
       'GET /api/summarize/health': '요약 서비스 상태 확인',
+      'GET /api/rooms': '회의실 목록 조회',
+      'GET /api/rooms/availability': '회의실 가용성 조회',
+      'POST /api/rooms/reservations': '예약 생성',
+      'GET /api/rooms/reservations/list': '예약 목록 조회',
+      'GET /api/search': '회의 통합 검색',
+      'GET /api/search/suggest': '검색 자동완성',
     },
   })
 })

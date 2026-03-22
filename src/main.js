@@ -8,6 +8,9 @@ import MeetingDetailView from './views/MeetingDetailView.vue'
 import MeetingsListView from './views/MeetingsListView.vue'
 import ActionItemsView from './views/ActionItemsView.vue'
 import NewMeetingView from './views/NewMeetingView.vue'
+import SearchView from './views/SearchView.vue'
+import RoomListView from './views/RoomListView.vue'
+import RoomCalendarView from './views/RoomCalendarView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +20,9 @@ const router = createRouter({
     { path: '/meetings/new', name: 'new-meeting', component: NewMeetingView },
     { path: '/meetings/:id', name: 'meeting-detail', component: MeetingDetailView },
     { path: '/action-items', name: 'action-items', component: ActionItemsView },
+    { path: '/search', name: 'search', component: SearchView },
+    { path: '/rooms', name: 'rooms', component: RoomListView },
+    { path: '/rooms/calendar', name: 'room-calendar', component: RoomCalendarView },
   ],
 })
 

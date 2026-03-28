@@ -2,34 +2,28 @@
 import { ref, computed, onMounted } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
 import MeetingCard from '../components/MeetingCard.vue'
-import SkeletonLoader from '../components/SkeletonLoader.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { fetchMeetings } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
-const loading = ref(true)
 const meetings = ref([...fallbackMeetings])
+const totalCount = ref(fallbackMeetings.length)
 const searchQuery = ref('')
 const filterStatus = ref('all')
+const dataSource = ref('mock')
 
+// mock 데이터를 즉시 표시하고, API 데이터가 오면 교체
 onMounted(async () => {
-  // 3초 타임아웃: 백엔드 미응답 시 mock 데이터로 즉시 전환
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 3000)
-
   try {
-    const res = await fetchMeetings({}, controller.signal)
-    if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+    const res = await fetchMeetings()
+    if (res.success && Array.isArray(res.data)) {
       meetings.value = res.data
+      totalCount.value = res.total || res.data.length
+      dataSource.value = 'db'
     }
   } catch (err) {
-    if (err.name !== 'AbortError') {
-      console.warn('[회의 ��록] DB 조회 실패, Mock 데이터 사용:', err.message)
-    }
-  } finally {
-    clearTimeout(timeout)
-    loading.value = false
+    console.warn('[회의 목록] DB 조회 실패, Mock 데이터 사용:', err.message)
   }
 })
 
@@ -47,7 +41,7 @@ const filteredMeetings = computed(() => {
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">회의 목록</h1>
-        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">전체 {{ meetings.length }}개의 회의</p>
+        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">전체 {{ totalCount }}개의 회의 <span v-if="dataSource === 'mock'" class="text-xs">(오프라인)</span></p>
       </div>
     </div>
 
@@ -82,30 +76,23 @@ const filteredMeetings = computed(() => {
       </div>
     </div>
 
-    <!-- Meeting list -->
-    <template v-if="loading">
-      <div class="space-y-3">
-        <SkeletonLoader type="card" :count="4" />
-      </div>
-    </template>
-    <template v-else>
-      <div class="space-y-3">
-        <MeetingCard v-for="meeting in filteredMeetings" :key="meeting.id" :meeting="meeting" />
-      </div>
-      <EmptyState
-        v-if="filteredMeetings.length === 0 && meetings.length > 0"
-        type="search"
-        title="검색 결과가 없습니다"
-        description="다른 키워드로 검색하거나 필터를 변경해보세요."
-      />
-      <EmptyState
-        v-if="meetings.length === 0"
-        type="meetings"
-        title="아직 회의록이 없습니다"
-        description="첫 번째 회의를 시작하고 AI가 자동으로 요약해드립니다."
-        action-label="첫 회의 시작하기"
-        action-to="/meetings/new"
-      />
-    </template>
+    <!-- Meeting list (즉시 렌더링) -->
+    <div class="space-y-3">
+      <MeetingCard v-for="meeting in filteredMeetings" :key="meeting.id" :meeting="meeting" />
+    </div>
+    <EmptyState
+      v-if="filteredMeetings.length === 0 && meetings.length > 0"
+      type="search"
+      title="검색 결과가 없습니다"
+      description="다른 키워드로 검색하거나 필터를 변경해보세요."
+    />
+    <EmptyState
+      v-if="meetings.length === 0"
+      type="meetings"
+      title="아직 회의록이 없습니다"
+      description="첫 번째 회의를 시작하고 AI가 자동으로 요약해드립니다."
+      action-label="첫 회의 시작하기"
+      action-to="/meetings/new"
+    />
   </div>
 </template>

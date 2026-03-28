@@ -1,9 +1,23 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
-import { meetings } from '../data/mockData.js'
+import { fetchMeetings } from '../services/api.js'
+import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
+const meetings = ref([...fallbackMeetings])
+
+// mock 데이터를 즉시 표시하고, API 데이터가 오면 교체
+onMounted(async () => {
+  try {
+    const res = await fetchMeetings()
+    if (res.success && Array.isArray(res.data)) {
+      meetings.value = res.data
+    }
+  } catch (err) {
+    console.warn('[회의 분석] DB 조회 실패, Mock 데이터 사용:', err.message)
+  }
+})
 
 // ── 필터 상태 ──
 const selectedTag = ref(null)
@@ -11,14 +25,14 @@ const selectedTag = ref(null)
 // ── 모든 태그 추출 ──
 const allTags = computed(() => {
   const tagSet = new Set()
-  meetings.forEach(m => (m.tags || []).forEach(t => tagSet.add(t)))
+  meetings.value.forEach(m => (m.tags || []).forEach(t => tagSet.add(t)))
   return [...tagSet].sort()
 })
 
 // ── 필터된 회의 ──
 const filteredMeetings = computed(() => {
-  if (!selectedTag.value) return meetings
-  return meetings.filter(m => (m.tags || []).includes(selectedTag.value))
+  if (!selectedTag.value) return meetings.value
+  return meetings.value.filter(m => (m.tags || []).includes(selectedTag.value))
 })
 
 // ── 통계 ──

@@ -1,9 +1,31 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
-import { meetings, stats } from '../data/mockData.js'
+import { fetchMeetings, fetchMeetingStats } from '../services/api.js'
+import { meetings as fallbackMeetings, stats as fallbackStats } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
+
+const meetings = ref([...fallbackMeetings])
+const statsData = ref({ ...fallbackStats })
+
+// DB 데이터 로드
+onMounted(async () => {
+  try {
+    const [meetingsRes, statsRes] = await Promise.all([
+      fetchMeetings(),
+      fetchMeetingStats(),
+    ])
+    if (meetingsRes.success && Array.isArray(meetingsRes.data)) {
+      meetings.value = meetingsRes.data
+    }
+    if (statsRes.success && statsRes.data) {
+      statsData.value = statsRes.data
+    }
+  } catch (err) {
+    console.warn('[리포트] DB 조회 실패, Mock 데이터 사용:', err.message)
+  }
+})
 
 // 기간 선택
 const selectedPeriod = ref('all')
@@ -19,12 +41,14 @@ const exportPDF = () => {
 }
 
 // ── 요약 카드 데이터 ──
-const totalMeetings = computed(() => stats.totalMeetings)
-const totalHours = computed(() => stats.totalHours)
-const completionRate = computed(() =>
-  Math.round((stats.actionItemsCompleted / stats.actionItemsTotal) * 100)
-)
-const avgSentiment = computed(() => stats.avgSentiment)
+const totalMeetings = computed(() => statsData.value.totalMeetings)
+const totalHours = computed(() => statsData.value.totalHours)
+const completionRate = computed(() => {
+  const total = statsData.value.actionItemsTotal
+  if (!total) return 0
+  return Math.round((statsData.value.actionItemsCompleted / total) * 100)
+})
+const avgSentiment = computed(() => statsData.value.avgSentiment)
 
 // ── 주간 회의 트렌드 (Mock) ──
 const weeklyData = [
@@ -37,8 +61,8 @@ const weeklyData = [
 const maxWeekly = Math.max(...weeklyData.map(d => d.count))
 
 // ── 액션아이템 완료 도넛 차트 ──
-const donutCompleted = stats.actionItemsCompleted
-const donutTotal = stats.actionItemsTotal
+const donutCompleted = computed(() => statsData.value.actionItemsCompleted)
+const donutTotal = computed(() => statsData.value.actionItemsTotal)
 const donutPercent = computed(() => completionRate.value)
 // SVG 원형 차트 계산 (둘레 = 2 * PI * r, r=70)
 const circumference = 2 * Math.PI * 70
@@ -48,7 +72,7 @@ const pendingStroke = computed(() => circumference - completedStroke.value)
 // ── 감정 분포 ──
 const sentimentCounts = computed(() => {
   const counts = { positive: 0, neutral: 0, negative: 0 }
-  meetings.forEach(m => {
+  meetings.value.forEach(m => {
     if (m.sentiment && counts[m.sentiment] !== undefined) {
       counts[m.sentiment]++
     }
@@ -66,7 +90,7 @@ const sentimentPercent = (key) => {
 // ── 참가자 활동 테이블 ──
 const participantActivity = computed(() => {
   const map = {}
-  meetings.forEach(m => {
+  meetings.value.forEach(m => {
     (m.participants || []).forEach(p => {
       if (!map[p]) map[p] = { name: p, meetingCount: 0, actionCount: 0 }
       map[p].meetingCount++
@@ -81,7 +105,7 @@ const participantActivity = computed(() => {
 
 // ── 회의 효율성 ──
 const completedMeetings = computed(() =>
-  meetings.filter(m => m.status === 'completed' && m.duration > 0)
+  meetings.value.filter(m => m.status === 'completed' && m.duration > 0)
 )
 const efficiencyScore = (meeting) => {
   const decisions = (meeting.keyDecisions || []).length

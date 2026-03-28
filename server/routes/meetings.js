@@ -40,7 +40,7 @@ function formatMeeting(row) {
 // ── 회의 목록 조회 ──
 router.get('/', async (req, res) => {
   try {
-    const { status, page = '1', limit = '20' } = req.query
+    const { status, page, limit } = req.query
     let sql = 'SELECT * FROM meetings'
     const params = []
 
@@ -49,14 +49,18 @@ router.get('/', async (req, res) => {
 
     const rows = await query(sql, params)
 
-    const pageNum = parseInt(page, 10)
-    const limitNum = parseInt(limit, 10)
-    const startIdx = (pageNum - 1) * limitNum
-    const paged = rows.slice(startIdx, startIdx + limitNum)
+    // limit이 지정된 경우에만 페이지네이션 적용
+    let data = rows
+    const pageNum = parseInt(page || '1', 10)
+    if (limit) {
+      const limitNum = parseInt(limit, 10)
+      const startIdx = (pageNum - 1) * limitNum
+      data = rows.slice(startIdx, startIdx + limitNum)
+    }
 
     res.json({
       success: true,
-      data: paged.map(formatMeeting),
+      data: data.map(formatMeeting),
       total: rows.length,
       page: pageNum,
     })

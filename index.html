@@ -15,9 +15,13 @@
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
     <script>
+      // 서비스 워커 완전 제거 (캐시 문제 방지)
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {})
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister())
+        })
+        caches.keys().then(keys => {
+          keys.forEach(k => caches.delete(k))
         })
       }
     </script>

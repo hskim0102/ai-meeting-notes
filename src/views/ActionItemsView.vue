@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
 import ActionItemRow from '../components/ActionItemRow.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { meetings } from '../data/mockData.js'
+import { fetchMeetings } from '../services/api.js'
+import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
 
@@ -13,19 +14,33 @@ const filterPriority = ref('all')
 const sortBy = ref('priority') // 'priority' | 'dueDate' | 'status'
 const sortAsc = ref(true)
 
-// 모든 액션 아이템 (하위 호환성 처리)
-const allActionItems = ref(
-  meetings.flatMap(m =>
-    m.actionItems.map(a => ({
+// 회의 데이터에서 액션 아이템 추출 헬퍼
+function extractActionItems(meetingList) {
+  return meetingList.flatMap(m =>
+    (m.actionItems || []).map(a => ({
       ...a,
       meetingTitle: m.title,
       meetingId: m.id,
-      // 하위 호환성: status/priority 필드 없으면 매핑
       status: a.status || (a.done ? 'done' : 'pending'),
       priority: a.priority || 'medium',
     }))
   )
-)
+}
+
+// 모든 액션 아이템 (하위 호환성 처리)
+const allActionItems = ref(extractActionItems(fallbackMeetings))
+
+// DB 데이터로 교체
+onMounted(async () => {
+  try {
+    const res = await fetchMeetings()
+    if (res.success && Array.isArray(res.data)) {
+      allActionItems.value = extractActionItems(res.data)
+    }
+  } catch (err) {
+    console.warn('[액션 아이템] DB 조회 실패, Mock 데이터 사용:', err.message)
+  }
+})
 
 // 상태별 카운트
 const statusCounts = computed(() => {

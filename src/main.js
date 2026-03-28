@@ -1,3 +1,13 @@
+// 서비스 워커 즉시 제거 (캐시 문제 완전 해결)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister())
+  })
+  if (typeof caches !== 'undefined') {
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)))
+  }
+}
+
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import './style.css'
@@ -52,4 +62,8 @@ router.beforeEach((to, from, next) => {
 
 const app = createApp(App)
 app.use(router)
-app.mount('#app')
+
+// 라우터 초기 네비게이션 완료 후 앱 마운트 (transition out-in 빈 화면 방지)
+router.isReady().then(() => {
+  app.mount('#app')
+})

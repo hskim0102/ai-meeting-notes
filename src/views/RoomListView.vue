@@ -2,11 +2,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { rooms as fallbackRooms, reservations as fallbackReservations } from '../data/mockData.js'
+import { useDarkMode } from '../composables/useDarkMode.js'
+import { fetchRooms, fetchReservations } from '../services/api.js'
 
 const router = useRouter()
 const filterCapacity = ref('all')
 const rooms = ref([...fallbackRooms])
 const reservations = ref([...fallbackReservations])
+const { isDark } = useDarkMode()
 
 // 오늘 날짜
 const today = new Date().toISOString().slice(0, 10)
@@ -14,11 +17,11 @@ const today = new Date().toISOString().slice(0, 10)
 onMounted(async () => {
   try {
     const [roomsRes, rsvRes] = await Promise.all([
-      fetch('/api/rooms').then(r => r.json()),
-      fetch(`/api/rooms/reservations/list?date=${today}`).then(r => r.json()),
+      fetchRooms(),
+      fetchReservations({ date: today }),
     ])
-    if (roomsRes.success) rooms.value = roomsRes.data
-    if (rsvRes.success) reservations.value = rsvRes.data
+    if (roomsRes.success && Array.isArray(roomsRes.data)) rooms.value = roomsRes.data
+    if (rsvRes.success && Array.isArray(rsvRes.data)) reservations.value = rsvRes.data
   } catch { /* fallback to mock */ }
 })
 
@@ -83,8 +86,8 @@ function goToCalendar() {
     <!-- 헤더 -->
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">회의실 관리</h1>
-        <p class="text-sm text-slate-500 mt-1">사내 회의실 현황 조회 및 예약</p>
+        <h1 :class="['text-2xl font-bold', isDark ? 'text-white' : 'text-slate-900']">회의실 관리</h1>
+        <p :class="['text-sm mt-1', isDark ? 'text-slate-400' : 'text-slate-500']">사내 회의실 현황 조회 및 예약</p>
       </div>
       <button
         @click="goToCalendar"
@@ -109,7 +112,7 @@ function goToCalendar() {
         :key="f.value"
         @click="filterCapacity = f.value"
         class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
-        :class="filterCapacity === f.value ? 'bg-primary-500 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
+        :class="filterCapacity === f.value ? 'bg-primary-500 text-white' : isDark ? 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'"
       >{{ f.label }}</button>
     </div>
 
@@ -118,11 +121,11 @@ function goToCalendar() {
       <div
         v-for="room in filteredRooms"
         :key="room.id"
-        class="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow"
+        :class="['rounded-xl p-5 hover:shadow-md transition-shadow', isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200']"
       >
         <!-- 상태 뱃지 + 이름 -->
         <div class="flex items-start justify-between mb-3">
-          <h3 class="text-lg font-semibold text-slate-900">{{ room.name }}</h3>
+          <h3 :class="['text-lg font-semibold', isDark ? 'text-white' : 'text-slate-900']">{{ room.name }}</h3>
           <span :class="['flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full', statusColor(room)]">
             <span :class="['w-1.5 h-1.5 rounded-full', statusDot(room)]"></span>
             {{ statusLabel(room) }}
@@ -136,7 +139,7 @@ function goToCalendar() {
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
             </svg>
-            {{ room.location.building }} {{ room.location.floor }}
+            {{ room.location?.building }} {{ room.location?.floor }}
           </span>
           <span class="flex items-center gap-1">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -151,7 +154,7 @@ function goToCalendar() {
           <span
             v-for="eq in room.equipment"
             :key="eq"
-            class="px-2 py-1 text-xs bg-slate-50 text-slate-600 rounded-md"
+            :class="['px-2 py-1 text-xs rounded-md', isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-50 text-slate-600']"
           >{{ equipmentIcon(eq) }} {{ eq }}</span>
         </div>
 

@@ -1,16 +1,19 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { rooms as fallbackRooms, reservations as fallbackReservations } from '../data/mockData.js'
+import { useDarkMode } from '../composables/useDarkMode.js'
+import { fetchRooms, fetchReservations, createReservation as apiCreateReservation, cancelReservation as apiCancelReservation } from '../services/api.js'
 
 // 반응형 데이터
 const rooms = ref([...fallbackRooms])
 const allReservations = ref([...fallbackReservations])
+const { isDark } = useDarkMode()
 
 // DB에서 데이터 로드
 onMounted(async () => {
   try {
-    const roomsRes = await fetch('/api/rooms').then(r => r.json())
-    if (roomsRes.success) rooms.value = roomsRes.data
+    const roomsRes = await fetchRooms()
+    if (roomsRes.success && Array.isArray(roomsRes.data)) rooms.value = roomsRes.data
   } catch { /* fallback */ }
   await loadReservations()
 })
@@ -19,8 +22,8 @@ async function loadReservations() {
   try {
     const weekStart = weekDays.value[0]?.date
     if (!weekStart) return
-    const res = await fetch(`/api/rooms/reservations/list?weekStart=${weekStart}`).then(r => r.json())
-    if (res.success) allReservations.value = res.data
+    const res = await fetchReservations({ weekStart })
+    if (res.success && Array.isArray(res.data)) allReservations.value = res.data
   } catch { /* fallback */ }
 }
 
@@ -71,7 +74,8 @@ const weekDays = computed(() => {
 
 const weekLabel = computed(() => {
   const start = weekDays.value[0]
-  const end = weekDays.value[4]
+  const end = weekDays.value[weekDays.value.length - 1]
+  if (!start || !end) return ''
   return `${start.date.slice(5)} ~ ${end.date.slice(5)}`
 })
 
@@ -205,12 +209,7 @@ async function submitReservation() {
   }
 
   try {
-    const res = await fetch('/api/rooms/reservations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newRsv),
-    })
-    const data = await res.json()
+    const data = await apiCreateReservation(newRsv)
     if (data.success) {
       allReservations.value.push(data.data)
     } else {
@@ -225,9 +224,9 @@ async function submitReservation() {
   closeModal()
 }
 
-async function cancelReservation(id) {
+async function cancelReservationHandler(id) {
   try {
-    await fetch(`/api/rooms/reservations/${id}`, { method: 'DELETE' })
+    await apiCancelReservation(id)
   } catch { /* ignore */ }
   const idx = allReservations.value.findIndex(r => r.id === id)
   if (idx !== -1) allReservations.value.splice(idx, 1)
@@ -240,8 +239,8 @@ async function cancelReservation(id) {
     <!-- 헤더 -->
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">예약 달력</h1>
-        <p class="text-sm text-slate-500 mt-1">회의실별 주간 예약 현황</p>
+        <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">예약 달력</h1>
+        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">회의실별 주간 예약 현황</p>
       </div>
       <button
         @click="openCreateModal()"
@@ -262,7 +261,7 @@ async function cancelReservation(id) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
         </button>
-        <span class="text-sm font-semibold text-slate-900 min-w-[140px] text-center">{{ weekLabel }}</span>
+        <span class="text-sm font-semibold min-w-[140px] text-center" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ weekLabel }}</span>
         <button @click="nextWeek" class="p-2 hover:bg-slate-100 rounded-lg transition-colors">
           <svg class="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -282,7 +281,7 @@ async function cancelReservation(id) {
     </div>
 
     <!-- 달력 그리드 -->
-    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div class="rounded-xl border overflow-hidden" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
       <!-- 요일 헤더 -->
       <div class="grid border-b border-slate-200" :style="{ gridTemplateColumns: `80px repeat(${weekDays.length}, 1fr)` }">
         <div class="p-3 text-xs font-medium text-slate-400 border-r border-slate-100"></div>
@@ -344,10 +343,10 @@ async function cancelReservation(id) {
 
     <!-- 모달 (생성 / 상세보기) -->
     <div v-if="showModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="closeModal">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div class="rounded-2xl shadow-xl w-full max-w-md p-6" :class="isDark ? 'bg-slate-800' : 'bg-white'">
         <!-- 생성 모달 -->
         <template v-if="modalMode === 'create'">
-          <h2 class="text-lg font-bold text-slate-900 mb-5">회의실 예약</h2>
+          <h2 class="text-lg font-bold mb-5" :class="isDark ? 'text-slate-100' : 'text-slate-900'">회의실 예약</h2>
 
           <div class="space-y-4">
             <div>
@@ -403,7 +402,7 @@ async function cancelReservation(id) {
         <!-- 상세 보기 모달 -->
         <template v-else-if="modalMode === 'view' && selectedReservation">
           <div class="flex items-start justify-between mb-4">
-            <h2 class="text-lg font-bold text-slate-900">{{ selectedReservation.title }}</h2>
+            <h2 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ selectedReservation.title }}</h2>
             <button @click="closeModal" class="p-1 hover:bg-slate-100 rounded-lg transition-colors">
               <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -445,7 +444,7 @@ async function cancelReservation(id) {
           </div>
 
           <div class="flex gap-3 mt-6">
-            <button @click="cancelReservation(selectedReservation.id)" class="flex-1 px-4 py-2.5 text-sm font-medium text-danger-600 bg-danger-50 rounded-lg hover:bg-danger-100 transition-colors">
+            <button @click="cancelReservationHandler(selectedReservation.id)" class="flex-1 px-4 py-2.5 text-sm font-medium text-danger-600 bg-danger-50 rounded-lg hover:bg-danger-100 transition-colors">
               예약 취소
             </button>
             <button @click="closeModal" class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">

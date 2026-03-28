@@ -1,9 +1,16 @@
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useDarkMode } from '../composables/useDarkMode.js'
 import ActionItemRow from '../components/ActionItemRow.vue'
+import SkeletonLoader from '../components/SkeletonLoader.vue'
+import MeetingChatbot from '../components/MeetingChatbot.vue'
+import SpeakerTimeline from '../components/SpeakerTimeline.vue'
+import CollaborationIndicator from '../components/CollaborationIndicator.vue'
 import { fetchMeeting, updateMeeting, sendMeetingEmail } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
+
+const { isDark } = useDarkMode()
 
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +56,27 @@ onMounted(async () => {
 })
 
 const meeting = computed(() => meetingData.value)
+
+// 스피커별 색상 매핑
+const speakerColors = computed(() => {
+  if (!meeting.value?.transcript) return {}
+  const colors = [
+    { bg: 'bg-primary-100', text: 'text-primary-700', bubble: 'bg-primary-50 border-primary-200' },
+    { bg: 'bg-accent-100', text: 'text-accent-700', bubble: 'bg-accent-50 border-accent-200' },
+    { bg: 'bg-success-100', text: 'text-success-700', bubble: 'bg-success-50 border-success-200' },
+    { bg: 'bg-warning-100', text: 'text-warning-700', bubble: 'bg-warning-50 border-warning-200' },
+    { bg: 'bg-danger-100', text: 'text-danger-700', bubble: 'bg-danger-50 border-danger-200' },
+    { bg: 'bg-indigo-100', text: 'text-indigo-700', bubble: 'bg-indigo-50 border-indigo-200' },
+  ]
+  const map = {}
+  const speakers = [...new Set(meeting.value.transcript.map(e => e.speaker))]
+  speakers.forEach((speaker, i) => {
+    map[speaker] = colors[i % colors.length]
+  })
+  return map
+})
+
+const hasTranscript = computed(() => meeting.value?.transcript?.length > 0)
 
 // ── 편집 진입/취소 ──
 function startEditing() {
@@ -182,6 +210,7 @@ function showToast(message, type = 'success') {
 }
 
 const formatDuration = (min) => {
+  if (!min) return ''
   if (min >= 60) return `${Math.floor(min / 60)}시간 ${min % 60}분`
   return `${min}분`
 }
@@ -217,9 +246,22 @@ const sentimentColor = computed(() => {
     </Transition>
   </Teleport>
 
-  <div class="p-8" v-if="meeting">
+  <!-- 로딩 중 스켈레톤 -->
+  <div v-if="loading" class="p-8">
+    <div class="mb-8">
+      <SkeletonLoader type="card" :count="1" />
+    </div>
+    <div class="space-y-4">
+      <SkeletonLoader type="list" :count="5" />
+    </div>
+  </div>
+
+  <div class="p-8" v-else-if="meeting">
+    <!-- 실시간 협업 인디케이터 -->
+    <CollaborationIndicator :meeting-id="meeting.id" />
+
     <!-- Back button -->
-    <button @click="router.back()" class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-6 transition-colors">
+    <button @click="router.back()" class="flex items-center gap-1.5 text-sm mb-6 transition-colors" :class="isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
       </svg>
@@ -258,8 +300,8 @@ const sentimentColor = computed(() => {
           {{ meeting.status === 'completed' ? '완료' : '진행 중' }}
         </span>
       </div>
-      <h1 class="text-2xl font-bold text-slate-900 mb-3">{{ meeting.title }}</h1>
-      <div class="flex items-center gap-4 text-sm text-slate-500">
+      <h1 class="text-2xl font-bold mb-3" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ meeting.title }}</h1>
+      <div class="flex items-center gap-4 text-sm" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
         <span class="flex items-center gap-1.5">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
@@ -327,183 +369,173 @@ const sentimentColor = computed(() => {
       </button>
     </div>
 
-    <!-- Tabs -->
-    <div class="border-b border-slate-200 mb-6">
-      <div class="flex gap-6">
-        <button
-          v-for="tab in [
-            { id: 'summary', label: 'AI 요약' },
-            { id: 'actions', label: '액션 아이템' },
-            { id: 'transcript', label: '회의록' },
-          ]"
-          :key="tab.id"
-          @click="activeTab = tab.id"
-          class="pb-3 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === tab.id ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
-    </div>
+    <!-- 2-Column Layout -->
+    <div class="flex flex-col lg:flex-row gap-6">
 
-    <!-- Tab Content: AI Summary -->
-    <div v-if="activeTab === 'summary'" class="space-y-6">
-      <!-- AI 요약 -->
-      <div class="bg-white rounded-xl border border-slate-200 p-6">
-        <div class="flex items-center gap-2 mb-4">
-          <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-          </svg>
-          <h3 class="text-base font-semibold text-slate-900">AI 요약</h3>
-        </div>
-        <!-- 뷰 모드 -->
-        <p v-if="!isEditing" class="text-sm text-slate-600 leading-relaxed">{{ meeting.aiSummary }}</p>
-        <!-- 편집 모드 -->
-        <textarea
-          v-else
-          v-model="editData.aiSummary"
-          rows="5"
-          class="w-full text-sm text-slate-600 leading-relaxed border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y"
-        ></textarea>
+      <!-- ===== Left Column: Transcript (60%) ===== -->
+      <div v-if="hasTranscript" class="w-full lg:w-[60%] space-y-6">
+        <!-- 화자 분리 타임라인 -->
+        <SpeakerTimeline :transcript="meeting.transcript" />
       </div>
 
-      <!-- 주요 결정 사항 -->
-      <div class="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 class="text-base font-semibold text-slate-900 mb-4">주요 결정 사항</h3>
-        <!-- 뷰 모드 -->
-        <ul v-if="!isEditing" class="space-y-3">
-          <li v-for="(decision, i) in meeting.keyDecisions" :key="i" class="flex items-start gap-3">
-            <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-              {{ i + 1 }}
-            </div>
-            <p class="text-sm text-slate-700">{{ decision }}</p>
-          </li>
-        </ul>
-        <!-- 편집 모드 -->
-        <div v-else class="space-y-2">
-          <div v-for="(decision, i) in editData.keyDecisions" :key="i" class="flex items-start gap-2">
-            <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-1">
-              {{ i + 1 }}
-            </div>
-            <input
-              v-model="editData.keyDecisions[i]"
-              type="text"
-              class="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <button @click="removeDecision(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <div class="flex items-center gap-2 mt-2">
-            <input
-              v-model="newDecisionInput"
-              @keyup.enter="addDecision"
-              type="text"
-              placeholder="새 결정사항 추가..."
-              class="flex-1 text-sm border border-dashed border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <button @click="addDecision" class="text-primary-500 hover:text-primary-700 text-sm font-medium">추가</button>
-          </div>
-        </div>
-      </div>
-    </div>
+      <!-- ===== Right Column: AI Summary Panel (40%, or full width if no transcript) ===== -->
+      <div :class="hasTranscript ? 'w-full lg:w-[40%]' : 'w-full'">
+        <div class="lg:sticky lg:top-6 space-y-6">
 
-    <!-- Tab Content: Action Items -->
-    <div v-if="activeTab === 'actions'">
-      <div class="bg-white rounded-xl border border-slate-200">
-        <div class="p-5 border-b border-slate-100">
-          <div class="flex items-center justify-between">
-            <h3 class="text-base font-semibold text-slate-900">액션 아이템</h3>
-            <span class="text-xs text-slate-400">
-              {{ (isEditing ? editData.actionItems : meeting.actionItems).filter(a => a.done).length }}/{{ (isEditing ? editData.actionItems : meeting.actionItems).length }} 완료
-            </span>
-          </div>
-          <!-- Progress bar -->
-          <div class="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              class="h-full bg-success-500 rounded-full transition-all duration-300"
-              :style="{ width: (() => { const items = isEditing ? editData.actionItems : meeting.actionItems; return items.length ? `${(items.filter(a => a.done).length / items.length * 100)}%` : '0%' })() }"
-            ></div>
-          </div>
-        </div>
-        <!-- 뷰 모드 -->
-        <div v-if="!isEditing" class="divide-y divide-slate-50">
-          <ActionItemRow
-            v-for="(item, i) in meeting.actionItems"
-            :key="i"
-            :item="item"
-            @toggle="toggleItem"
-          />
-        </div>
-        <!-- 편집 모드 -->
-        <div v-else class="p-4 space-y-3">
-          <div v-for="(item, i) in editData.actionItems" :key="i" class="bg-slate-50 rounded-lg p-3">
-            <div class="flex items-start gap-2">
-              <button
-                @click="item.done = !item.done"
-                class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
-                :class="item.done ? 'bg-success-500 border-success-500' : 'border-slate-300 hover:border-primary-400'"
-              >
-                <svg v-if="item.done" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-              </button>
-              <input
-                v-model="item.text"
-                type="text"
-                placeholder="액션 아이템 내용"
-                class="flex-1 text-sm border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-              <button @click="removeActionItem(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+          <!-- AI 요약 -->
+          <div class="rounded-xl border p-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
+            <div class="flex items-center gap-2 mb-4">
+              <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              <h3 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">AI 요약</h3>
             </div>
-            <div class="flex gap-2 mt-2 ml-7">
-              <input
-                v-model="item.assignee"
-                type="text"
-                placeholder="담당자"
-                class="text-xs border border-slate-200 rounded px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-              <input
-                v-model="item.dueDate"
-                type="date"
-                class="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              />
-            </div>
+            <!-- 뷰 모드 -->
+            <p v-if="!isEditing" class="text-sm leading-relaxed" :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ meeting.aiSummary }}</p>
+            <!-- 편집 모드 -->
+            <textarea
+              v-else
+              v-model="editData.aiSummary"
+              rows="5"
+              class="w-full text-sm leading-relaxed border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y"
+              :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200 text-slate-600'"
+            ></textarea>
           </div>
-          <button
-            @click="addActionItem"
-            class="w-full py-2 text-sm text-primary-500 hover:text-primary-700 border border-dashed border-slate-300 rounded-lg hover:border-primary-300 transition-colors"
-          >
-            + 액션 아이템 추가
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Tab Content: Transcript -->
-    <div v-if="activeTab === 'transcript'">
-      <div v-if="meeting.transcript.length" class="bg-white rounded-xl border border-slate-200 p-6">
-        <div class="space-y-4">
-          <div v-for="(entry, i) in meeting.transcript" :key="i" class="flex gap-3">
-            <div class="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-xs font-bold text-primary-700 shrink-0">
-              {{ entry.speaker[0] }}
-            </div>
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-sm font-medium text-slate-900">{{ entry.speaker }}</span>
-                <span class="text-xs text-slate-400">{{ entry.time }}</span>
+          <!-- 주요 결정 사항 -->
+          <div class="rounded-xl border p-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
+            <h3 class="text-base font-semibold mb-4" :class="isDark ? 'text-slate-100' : 'text-slate-900'">주요 결정 사항</h3>
+            <!-- 뷰 모드 -->
+            <ul v-if="!isEditing" class="space-y-3">
+              <li v-for="(decision, i) in meeting.keyDecisions" :key="i" class="flex items-start gap-3">
+                <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                  {{ i + 1 }}
+                </div>
+                <p class="text-sm" :class="isDark ? 'text-slate-300' : 'text-slate-700'">{{ decision }}</p>
+              </li>
+            </ul>
+            <!-- 편집 모드 -->
+            <div v-else class="space-y-2">
+              <div v-for="(decision, i) in editData.keyDecisions" :key="i" class="flex items-start gap-2">
+                <div class="w-6 h-6 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0 mt-1">
+                  {{ i + 1 }}
+                </div>
+                <input
+                  v-model="editData.keyDecisions[i]"
+                  type="text"
+                  class="flex-1 text-sm border rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200'"
+                />
+                <button @click="removeDecision(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
               </div>
-              <p class="text-sm text-slate-600 leading-relaxed">{{ entry.text }}</p>
+              <div class="flex items-center gap-2 mt-2">
+                <input
+                  v-model="newDecisionInput"
+                  @keyup.enter="addDecision"
+                  type="text"
+                  placeholder="새 결정사항 추가..."
+                  class="flex-1 text-sm border border-dashed rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  :class="isDark ? 'border-slate-600 bg-slate-700 text-slate-200' : 'border-slate-300'"
+                />
+                <button @click="addDecision" class="text-primary-500 hover:text-primary-700 text-sm font-medium">추가</button>
+              </div>
             </div>
           </div>
+
+          <!-- 액션 아이템 -->
+          <div class="rounded-xl border" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
+            <div class="p-5 border-b" :class="isDark ? 'border-slate-700' : 'border-slate-100'">
+              <div class="flex items-center justify-between">
+                <h3 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">액션 아이템</h3>
+                <span class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  {{ (isEditing ? editData.actionItems : (meeting.actionItems || [])).filter(a => a.done).length }}/{{ (isEditing ? editData.actionItems : (meeting.actionItems || [])).length }} 완료
+                </span>
+              </div>
+              <!-- Progress bar -->
+              <div class="mt-3 h-1.5 rounded-full overflow-hidden" :class="isDark ? 'bg-slate-700' : 'bg-slate-100'">
+                <div
+                  class="h-full bg-success-500 rounded-full transition-all duration-300"
+                  :style="{ width: (() => { const items = isEditing ? editData.actionItems : (meeting.actionItems || []); return items.length ? `${(items.filter(a => a.done).length / items.length * 100)}%` : '0%' })() }"
+                ></div>
+              </div>
+            </div>
+            <!-- 뷰 모드 -->
+            <div v-if="!isEditing" class="divide-y" :class="isDark ? 'divide-slate-700' : 'divide-slate-50'">
+              <ActionItemRow
+                v-for="(item, i) in (meeting.actionItems || [])"
+                :key="i"
+                :item="item"
+                @toggle="toggleItem"
+              />
+            </div>
+            <!-- 편집 모드 -->
+            <div v-else class="p-4 space-y-3">
+              <div v-for="(item, i) in editData.actionItems" :key="i" class="rounded-lg p-3" :class="isDark ? 'bg-slate-700/50' : 'bg-slate-50'">
+                <div class="flex items-start gap-2">
+                  <button
+                    @click="item.done = !item.done"
+                    class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                    :class="item.done ? 'bg-success-500 border-success-500' : isDark ? 'border-slate-500 hover:border-primary-400' : 'border-slate-300 hover:border-primary-400'"
+                  >
+                    <svg v-if="item.done" class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                  </button>
+                  <input
+                    v-model="item.text"
+                    type="text"
+                    placeholder="액션 아이템 내용"
+                    class="flex-1 text-sm border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200'"
+                  />
+                  <button @click="removeActionItem(i)" class="text-slate-400 hover:text-danger-500 transition-colors p-1">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div class="flex gap-2 mt-2 ml-7">
+                  <input
+                    v-model="item.assignee"
+                    type="text"
+                    placeholder="담당자"
+                    class="text-xs border rounded px-2 py-1 w-28 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200'"
+                  />
+                  <input
+                    v-model="item.dueDate"
+                    type="date"
+                    class="text-xs border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200'"
+                  />
+                </div>
+              </div>
+              <button
+                @click="addActionItem"
+                class="w-full py-2 text-sm text-primary-500 hover:text-primary-700 border border-dashed rounded-lg hover:border-primary-300 transition-colors"
+                :class="isDark ? 'border-slate-600' : 'border-slate-300'"
+              >
+                + 액션 아이템 추가
+              </button>
+            </div>
+          </div>
+
+          <!-- 태그 (편집 모드에서는 헤더에 표시되므로 뷰 모드에서만 하단에 표시) -->
+          <div v-if="!isEditing && meeting.tags?.length" class="rounded-xl border p-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
+            <h3 class="text-base font-semibold mb-3" :class="isDark ? 'text-slate-100' : 'text-slate-900'">태그</h3>
+            <div class="flex flex-wrap gap-2">
+              <span
+                v-for="tag in meeting.tags"
+                :key="tag"
+                class="text-xs px-3 py-1.5 rounded-full font-medium"
+                :class="isDark ? 'bg-primary-900/30 text-primary-400' : 'bg-primary-50 text-primary-600'"
+              >
+                {{ tag }}
+              </span>
+            </div>
+          </div>
+
         </div>
       </div>
-      <div v-else class="text-center py-16 text-slate-400">
-        <svg class="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-        <p class="text-sm">회의록이 아직 없습니다</p>
-      </div>
+
     </div>
   </div>
 
@@ -514,6 +546,14 @@ const sentimentColor = computed(() => {
       목록으로 돌아가기
     </router-link>
   </div>
+
+  <!-- Q&A 챗봇 -->
+  <MeetingChatbot
+    v-if="meeting"
+    :meeting-id="meeting.id"
+    :transcript="meeting.transcript || []"
+    :ai-summary="meeting.aiSummary || ''"
+  />
 
   <!-- 메일 발송 모달 -->
   <Teleport to="body">

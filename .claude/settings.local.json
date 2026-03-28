@@ -7,7 +7,8 @@
       "Bash(npm install:*)",
       "Bash(node server/scripts/initDb.js 2>&1)",
       "Bash(timeout 5 node server/index.js 2>&1 || true)",
-      "Bash(lsof -ti:3001 | xargs kill 2>/dev/null; true)"
+      "Bash(lsof -ti:3001 | xargs kill 2>/dev/null; true)",
+      "Bash(npm run:*)"
     ]
   }
 }

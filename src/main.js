@@ -11,10 +11,16 @@ import NewMeetingView from './views/NewMeetingView.vue'
 import SearchView from './views/SearchView.vue'
 import RoomListView from './views/RoomListView.vue'
 import RoomCalendarView from './views/RoomCalendarView.vue'
+import MeetingAnalysisView from './views/MeetingAnalysisView.vue'
+import ReportView from './views/ReportView.vue'
+import LoginView from './views/LoginView.vue'
+import SettingsView from './views/SettingsView.vue'
+import AuditLogView from './views/AuditLogView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
     { path: '/', name: 'dashboard', component: DashboardView },
     { path: '/meetings', name: 'meetings', component: MeetingsListView },
     { path: '/meetings/new', name: 'new-meeting', component: NewMeetingView },
@@ -23,7 +29,25 @@ const router = createRouter({
     { path: '/search', name: 'search', component: SearchView },
     { path: '/rooms', name: 'rooms', component: RoomListView },
     { path: '/rooms/calendar', name: 'room-calendar', component: RoomCalendarView },
+    { path: '/analysis', name: 'analysis', component: MeetingAnalysisView },
+    { path: '/reports', name: 'reports', component: ReportView },
+    { path: '/settings', name: 'settings', component: SettingsView },
+    { path: '/audit-log', name: 'audit-log', component: AuditLogView, meta: { requiresAdmin: true } },
   ],
+})
+
+// 라우트 가드: 인증 체크
+router.beforeEach((to, from, next) => {
+  const user = JSON.parse(localStorage.getItem('auth_user') || 'null')
+  if (!to.meta.public && !user) {
+    next({ name: 'login' })
+  } else if (to.name === 'login' && user) {
+    next({ name: 'dashboard' })
+  } else if (to.meta.requiresAdmin && user?.role !== 'admin') {
+    next({ name: 'dashboard' })
+  } else {
+    next()
+  }
 })
 
 const app = createApp(App)

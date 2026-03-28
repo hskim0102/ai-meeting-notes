@@ -1,5 +1,8 @@
 <script setup>
 import { computed } from 'vue'
+import { useDarkMode } from '../composables/useDarkMode.js'
+
+const { isDark } = useDarkMode()
 
 const props = defineProps({
   meeting: Object,
@@ -11,6 +14,14 @@ const statusLabel = computed(() => {
 })
 
 const statusClass = computed(() => {
+  if (isDark.value) {
+    const map = {
+      completed: 'bg-success-500/15 text-success-500',
+      'in-progress': 'bg-primary-500/15 text-primary-400',
+      scheduled: 'bg-slate-700 text-slate-400',
+    }
+    return map[props.meeting.status] || 'bg-slate-700 text-slate-400'
+  }
   const map = {
     completed: 'bg-success-50 text-success-600',
     'in-progress': 'bg-primary-50 text-primary-600',
@@ -30,15 +41,22 @@ const sentimentColor = computed(() => {
 })
 
 const formatDuration = (min) => {
+  if (!min) return ''
   if (min >= 60) return `${Math.floor(min / 60)}시간 ${min % 60}분`
   return `${min}분`
 }
+
+const participants = computed(() => props.meeting.participants || [])
+const tags = computed(() => props.meeting.tags || [])
 </script>
 
 <template>
   <router-link
     :to="`/meetings/${meeting.id}`"
-    class="block bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md hover:border-primary-200 transition-all group"
+    class="block rounded-xl border p-5 transition-all group"
+    :class="isDark
+      ? 'bg-slate-800 border-slate-700 hover:border-primary-500/50 hover:shadow-lg hover:shadow-primary-500/5'
+      : 'bg-white border-slate-200 hover:shadow-md hover:border-primary-200'"
   >
     <div class="flex items-start justify-between mb-3">
       <div class="flex-1 min-w-0">
@@ -46,11 +64,19 @@ const formatDuration = (min) => {
           <span class="text-xs px-2 py-0.5 rounded-full font-medium" :class="statusClass">
             {{ statusLabel }}
           </span>
-          <span v-for="tag in meeting.tags" :key="tag" class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+          <span
+            v-for="tag in tags"
+            :key="tag"
+            class="text-xs px-2 py-0.5 rounded-full"
+            :class="isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-600'"
+          >
             {{ tag }}
           </span>
         </div>
-        <h3 class="text-sm font-semibold text-slate-900 group-hover:text-primary-600 transition-colors truncate">
+        <h3
+          class="text-sm font-semibold transition-colors truncate"
+          :class="isDark ? 'text-slate-100 group-hover:text-primary-400' : 'text-slate-900 group-hover:text-primary-600'"
+        >
           {{ meeting.title }}
         </h3>
       </div>
@@ -67,11 +93,11 @@ const formatDuration = (min) => {
       </div>
     </div>
 
-    <p v-if="meeting.aiSummary" class="text-xs text-slate-500 mb-3 line-clamp-2">
+    <p v-if="meeting.aiSummary" class="text-xs mb-3 line-clamp-2" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
       {{ meeting.aiSummary }}
     </p>
 
-    <div class="flex items-center justify-between text-xs text-slate-400">
+    <div class="flex items-center justify-between text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
       <div class="flex items-center gap-3">
         <span class="flex items-center gap-1">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -88,17 +114,19 @@ const formatDuration = (min) => {
       </div>
       <div class="flex -space-x-1.5">
         <div
-          v-for="(p, i) in meeting.participants.slice(0, 3)"
+          v-for="(p, i) in participants.slice(0, 3)"
           :key="i"
-          class="w-5 h-5 rounded-full bg-slate-200 border border-white flex items-center justify-center text-[9px] font-medium text-slate-600"
+          class="w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-medium"
+          :class="isDark ? 'bg-slate-700 border-slate-800 text-slate-300' : 'bg-slate-200 border-white text-slate-600'"
         >
           {{ p[0] }}
         </div>
         <div
-          v-if="meeting.participants.length > 3"
-          class="w-5 h-5 rounded-full bg-slate-300 border border-white flex items-center justify-center text-[9px] font-medium text-slate-600"
+          v-if="participants.length > 3"
+          class="w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-medium"
+          :class="isDark ? 'bg-slate-600 border-slate-800 text-slate-300' : 'bg-slate-300 border-white text-slate-600'"
         >
-          +{{ meeting.participants.length - 3 }}
+          +{{ participants.length - 3 }}
         </div>
       </div>
     </div>

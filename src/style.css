@@ -47,6 +47,12 @@ body {
   background-color: var(--color-slate-50);
 }
 
+/* 다크 모드 body */
+.dark body,
+body.dark {
+  background-color: var(--color-slate-900);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
@@ -57,4 +63,67 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--color-slate-300);
   border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--color-slate-600);
+}
+
+/* 페이지 전환 애니메이션 */
+.page-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.page-leave-active {
+  transition: opacity 0.15s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+
+/* 스켈레톤 로딩 애니메이션 */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.skeleton-pulse {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* 커맨드 팔레트 오버레이 */
+.cmd-overlay-enter-active {
+  transition: opacity 0.15s ease;
+}
+.cmd-overlay-leave-active {
+  transition: opacity 0.1s ease;
+}
+.cmd-overlay-enter-from,
+.cmd-overlay-leave-to {
+  opacity: 0;
+}
+.cmd-panel-enter-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.cmd-panel-leave-active {
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.cmd-panel-enter-from {
+  opacity: 0;
+  transform: scale(0.95) translateY(-10px);
+}
+.cmd-panel-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+/* 사이드바 전환 */
+.sidebar-overlay-enter-active,
+.sidebar-overlay-leave-active {
+  transition: opacity 0.2s ease;
+}
+.sidebar-overlay-enter-from,
+.sidebar-overlay-leave-to {
+  opacity: 0;
 }

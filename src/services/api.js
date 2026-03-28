@@ -83,12 +83,13 @@ export async function checkServerHealth() {
 /**
  * 회의 목록 조회 (DB)
  */
-export async function fetchMeetings(params = {}) {
+export async function fetchMeetings(params = {}, signal) {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') query.set(key, value)
   }
-  const res = await fetch(`${API_BASE}/meetings?${query}`)
+  const opts = signal ? { signal } : {}
+  const res = await fetch(`${API_BASE}/meetings?${query}`, opts)
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '회의 목록 조회 실패')
   return data
@@ -121,8 +122,9 @@ export async function createMeeting(meeting) {
 /**
  * 대시보드 통계 조회 (DB)
  */
-export async function fetchMeetingStats() {
-  const res = await fetch(`${API_BASE}/meetings/stats`)
+export async function fetchMeetingStats(signal) {
+  const opts = signal ? { signal } : {}
+  const res = await fetch(`${API_BASE}/meetings/stats`, opts)
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '통계 조회 실패')
   return data

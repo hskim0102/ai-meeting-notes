@@ -272,3 +272,105 @@ export async function cancelReservation(id) {
   if (!res.ok) throw new Error(data.error || '예약 취소 실패')
   return data
 }
+
+// ─────────────────────────────────────────────────
+// 녹음 보관 API
+// ─────────────────────────────────────────────────
+
+/**
+ * 녹음 파일을 서버에 업로드 저장
+ * @param {File|Blob} file - 오디오 파일
+ * @param {number} duration - 녹음 길이 (초)
+ * @param {function} onProgress - 업로드 진행률 콜백 (0~100)
+ * @returns {Promise<object>} - { success, data: { id, fileName, fileSize, duration, status } }
+ */
+export async function saveRecording(file, duration = 0, onProgress = null) {
+  const formData = new FormData()
+  formData.append('audio', file)
+  formData.append('duration', String(duration))
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_BASE}/recordings`)
+
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      }
+    }
+
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data)
+        } else {
+          reject(new Error(data.error || '녹음 저장 실패'))
+        }
+      } catch {
+        reject(new Error('서버 응답 파싱 실패'))
+      }
+    }
+
+    xhr.onerror = () => reject(new Error('서버 연결 실패'))
+    xhr.send(formData)
+  })
+}
+
+/**
+ * 녹음 목록 조회
+ * @param {string} [status] - 필터: 'pending' | 'transcribed' | 'completed'
+ */
+export async function fetchRecordings(status) {
+  const query = status ? `?status=${status}` : ''
+  const res = await fetch(`${API_BASE}/recordings${query}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '녹음 목록 조회 실패')
+  return data
+}
+
+/**
+ * 녹음 상세 조회
+ */
+export async function fetchRecording(id) {
+  const res = await fetch(`${API_BASE}/recordings/${id}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '녹음 조회 실패')
+  return data
+}
+
+/**
+ * 녹음 파일 스트리밍 URL 반환
+ */
+export function getRecordingFileUrl(id) {
+  return `${API_BASE}/recordings/${id}/file`
+}
+
+/**
+ * 녹음 삭제
+ */
+export async function deleteRecording(id) {
+  const res = await fetch(`${API_BASE}/recordings/${id}`, { method: 'DELETE' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '녹음 삭제 실패')
+  return data
+}
+
+/**
+ * 저장된 녹음으로 STT 실행
+ * @param {number} id - 녹음 ID
+ * @param {string} language - 언어 코드
+ * @returns {Promise<object>} - { success, data: { fullText, segments, meta } }
+ */
+export async function transcribeRecording(id, language = 'ko') {
+  const res = await fetch(`${API_BASE}/recordings/${id}/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'STT 변환 실패')
+  return data
+}

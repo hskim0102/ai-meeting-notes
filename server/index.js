@@ -22,6 +22,7 @@ import summarizeRouter from './routes/summarize.js'
 import roomsRouter from './routes/rooms.js'
 import searchRouter from './routes/search.js'
 import meetingsRouter from './routes/meetings.js'
+import recordingsRouter from './routes/recordings.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -54,8 +55,9 @@ app.use(express.urlencoded({ extended: true }))
 
 // 서버 시작 시 필요한 디렉토리가 없으면 자동 생성
 const requiredDirs = [
-  path.join(__dirname, 'uploads'), // 업로드된 원본 파일 임시 저장
-  path.join(__dirname, 'temp'),    // 분할된 오디오 청크 임시 저장
+  path.join(__dirname, 'uploads'),     // 업로드된 원본 파일 임시 저장
+  path.join(__dirname, 'temp'),        // 분할된 오디오 청크 임시 저장
+  path.join(__dirname, 'recordings'),  // 녹음 파일 영구 저장
 ]
 
 for (const dir of requiredDirs) {
@@ -84,6 +86,9 @@ app.use('/api/search', searchRouter)
 // 회의 CRUD 엔드포인트
 app.use('/api/meetings', meetingsRouter)
 
+// 녹음 보관 엔드포인트
+app.use('/api/recordings', recordingsRouter)
+
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {
   res.json({
@@ -107,6 +112,12 @@ app.get('/api', (req, res) => {
       'PUT /api/meetings/:id': '회의 수정',
       'DELETE /api/meetings/:id': '회의 삭제',
       'POST /api/meetings/:id/send-email': '회의록 메일 발송',
+      'POST /api/recordings': '녹음 파일 업로드 저장',
+      'GET /api/recordings': '녹음 목록 조회',
+      'GET /api/recordings/:id': '녹음 상세 조회',
+      'GET /api/recordings/:id/file': '오디오 파일 스트리밍',
+      'DELETE /api/recordings/:id': '녹음 삭제',
+      'POST /api/recordings/:id/transcribe': '저장된 녹음 STT 변환',
     },
   })
 })

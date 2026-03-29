@@ -24,6 +24,7 @@ const handleLogout = () => {
 const navItems = [
   { name: '대시보드', path: '/', icon: 'dashboard', shortcut: '' },
   { name: '새 회의록', path: '/meetings/new', icon: 'mic', shortcut: '⌘N' },
+  { name: '녹음 보관함', path: '/recordings', icon: 'recordings', shortcut: '' },
   { name: '회의 목록', path: '/meetings', icon: 'meetings', shortcut: '' },
   { name: '액션 아이템', path: '/action-items', icon: 'actions', shortcut: '' },
   { name: '회의 분석', path: '/analysis', icon: 'analysis', shortcut: '' },
@@ -35,6 +36,7 @@ const navItems = [
 const isActive = (path) => {
   if (path === '/') return route.path === '/'
   if (path === '/meetings/new') return route.path === '/meetings/new'
+  if (path === '/recordings') return route.path.startsWith('/recordings')
   if (path === '/meetings') return route.path.startsWith('/meetings') && route.path !== '/meetings/new'
   if (path === '/rooms') return route.path.startsWith('/rooms')
   return route.path.startsWith(path)
@@ -115,6 +117,10 @@ const isActive = (path) => {
         <!-- Mic -->
         <svg v-if="item.icon === 'mic'" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+        </svg>
+        <!-- Recordings -->
+        <svg v-if="item.icon === 'recordings'" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
         </svg>
         <!-- Meetings -->
         <svg v-if="item.icon === 'meetings'" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

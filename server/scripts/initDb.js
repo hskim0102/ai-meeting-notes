@@ -102,6 +102,25 @@ async function run() {
   `)
   console.log('  ✓ reservations 테이블')
 
+  // 녹음 보관 테이블
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS recordings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      file_name VARCHAR(255) NOT NULL COMMENT '표시용 파일명',
+      file_path VARCHAR(500) NOT NULL COMMENT '서버 저장 경로',
+      file_size BIGINT NOT NULL COMMENT '파일 크기 (바이트)',
+      mime_type VARCHAR(100) DEFAULT 'audio/webm' COMMENT 'MIME 타입',
+      duration INT DEFAULT 0 COMMENT '녹음 길이 (초)',
+      status ENUM('pending', 'transcribed', 'completed') DEFAULT 'pending' COMMENT '처리 상태',
+      meeting_id INT DEFAULT NULL COMMENT '연결된 회의 ID',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_status (status),
+      INDEX idx_created (created_at),
+      FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='녹음 보관'
+  `)
+  console.log('  ✓ recordings 테이블')
+
   // ── 3. 시드 데이터 삽입 ──
   console.log('[4/4] 시드 데이터 삽입 중...')
 

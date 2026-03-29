@@ -11,7 +11,7 @@
  */
 
 import { ref, computed, onBeforeUnmount } from 'vue'
-import { transcribeAudio } from '../services/api.js'
+import { transcribeAudio, saveRecording } from '../services/api.js'
 
 // ── 이벤트 정의: 전사 완료 시 부모 컴포넌트에 결과 전달 ──
 const emit = defineEmits(['transcribed'])
@@ -50,6 +50,11 @@ const errorMessage = ref('')
 // 에러 자동 숨김 타이머
 let errorTimeout = null
 
+// 서버 자동 저장 상태
+const isSaving = ref(false)
+const savedRecordingId = ref(null)
+const saveProgress = ref(0)
+
 // ─────────────────────────────────────────────────
 // 계산된 속성
 // ─────────────────────────────────────────────────
@@ -85,6 +90,45 @@ function showError(message) {
   errorTimeout = setTimeout(() => {
     errorMessage.value = ''
   }, 5000)
+}
+
+// ─────────────────────────────────────────────────
+// 서버 자동 저장 (녹음 완료 시 백그라운드 실행)
+// ─────────────────────────────────────────────────
+
+/**
+ * 녹음된 Blob을 서버 recordings API에 자동 저장
+ * - 페이지를 떠나도 녹음 파일이 서버에 보존됨
+ * - 저장 실패해도 로컬 Blob은 유지 (STT 전송 가능)
+ */
+async function autoSaveToServer() {
+  if (!recordedBlob.value) return
+
+  isSaving.value = true
+  saveProgress.value = 0
+
+  try {
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}시${String(now.getMinutes()).padStart(2, '0')}분`
+    const fileName = `회의녹음_${dateStr}_${timeStr}.webm`
+
+    const file = new File([recordedBlob.value], fileName, { type: 'audio/webm' })
+
+    const result = await saveRecording(file, elapsedSeconds.value, (progress) => {
+      saveProgress.value = progress
+    })
+
+    if (result.success) {
+      savedRecordingId.value = result.data.id
+      console.log(`[자동 저장] 녹음 ID: ${result.data.id}`)
+    }
+  } catch (error) {
+    console.warn(`[자동 저장 실패] ${error.message}`)
+    // 저장 실패해도 로컬 Blob은 유지되므로 에러 표시하지 않음
+  } finally {
+    isSaving.value = false
+  }
 }
 
 // ─────────────────────────────────────────────────
@@ -143,7 +187,7 @@ async function startRecording() {
       }
     }
 
-    // onstop: 녹음이 중지되면 모든 청크를 하나의 Blob으로 병합
+    // onstop: 녹음이 중지되면 모든 청크를 하나의 Blob으로 병합하고 서버에 자동 저장
     mediaRecorder.onstop = () => {
       // 모든 오디오 청크를 하나의 webm Blob으로 합침
       recordedBlob.value = new Blob(audioChunks, { type: 'audio/webm' })
@@ -154,6 +198,9 @@ async function startRecording() {
         mediaStream.getTracks().forEach(track => track.stop())
         mediaStream = null
       }
+
+      // 서버에 자동 저장 (백그라운드)
+      autoSaveToServer()
     }
 
     // onerror: 녹음 중 에러 발생 시 처리
@@ -218,6 +265,7 @@ function discardRecording() {
   recordedBlob.value = null
   audioChunks = []
   elapsedSeconds.value = 0
+  savedRecordingId.value = null
   status.value = 'idle'
 }
 
@@ -291,6 +339,7 @@ async function sendToServer() {
       recordedBlob.value = null
       audioChunks = []
       elapsedSeconds.value = 0
+      savedRecordingId.value = null
       status.value = 'idle'
     } else {
       showError(result.error || '전사 처리에 실패했습니다.')
@@ -415,7 +464,18 @@ onBeforeUnmount(() => {
             <span class="text-slate-300">|</span>
             <span class="text-xs text-slate-500">{{ fileSizeText }}</span>
             <span class="text-slate-300">|</span>
-            <span class="text-xs text-slate-500">WebM 형식</span>
+            <!-- 서버 저장 상태 표시 -->
+            <span v-if="isSaving" class="text-xs text-amber-500 flex items-center gap-1">
+              <div class="animate-spin w-3 h-3 border border-amber-500 border-t-transparent rounded-full"></div>
+              서버 저장 중...
+            </span>
+            <span v-else-if="savedRecordingId" class="text-xs text-success-500 flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              서버에 보관됨
+            </span>
+            <span v-else class="text-xs text-slate-500">WebM 형식</span>
           </div>
         </div>
       </div>

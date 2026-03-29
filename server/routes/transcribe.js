@@ -139,9 +139,13 @@ router.post('/', upload.single('audio'), async (req, res) => {
     const uploadedFilePath = req.file.path
     cleanupTargets.push(uploadedFilePath) // 원본 파일도 처리 후 삭제 대상
 
+    // ── multer는 originalname을 latin1로 인코딩하므로, UTF-8로 복원 ──
+    // 한글 파일명이 깨지는 문제 방지
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8')
+
     const fileSizeMB = (req.file.size / 1024 / 1024).toFixed(2)
     console.log(`\n${'═'.repeat(60)}`)
-    console.log(`[업로드] 파일: ${req.file.originalname} (${fileSizeMB}MB)`)
+    console.log(`[업로드] 파일: ${originalName} (${fileSizeMB}MB)`)
     console.log(`[업로드] MIME: ${req.file.mimetype}`)
     console.log(`${'═'.repeat(60)}`)
 
@@ -218,7 +222,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         // 메타 정보
         meta: {
-          originalFileName: req.file.originalname,
+          originalFileName: originalName,
           fileSizeMB: parseFloat(fileSizeMB),
           totalDuration: transcript.totalDuration,
           segmentCount: transcript.segments.length,

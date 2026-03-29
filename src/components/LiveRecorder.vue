@@ -233,8 +233,10 @@ function discardRecording() {
 function downloadRecording() {
   if (!recordedBlob.value) return
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `회의녹음_${timestamp}.webm`
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const timeStr = `${String(now.getHours()).padStart(2, '0')}시${String(now.getMinutes()).padStart(2, '0')}분`
+  const fileName = `회의녹음_${dateStr}_${timeStr}.webm`
 
   const url = URL.createObjectURL(recordedBlob.value)
   const a = document.createElement('a')
@@ -266,11 +268,14 @@ async function sendToServer() {
 
   try {
     // ── Blob을 File 객체로 변환 ──
-    // 파일명에 타임스탬프를 포함하여 고유성 확보
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    // 파일명을 읽기 쉬운 날짜 형식으로 생성 (YYYY-MM-DD_HH시MM분)
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}시${String(now.getMinutes()).padStart(2, '0')}분`
+    const fileName = `회의녹음_${dateStr}_${timeStr}.webm`
     const file = new File(
       [recordedBlob.value],
-      `회의녹음_${timestamp}.webm`,
+      fileName,
       { type: 'audio/webm' }
     )
 

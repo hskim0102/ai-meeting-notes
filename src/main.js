@@ -27,6 +27,7 @@ import LoginView from './views/LoginView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AuditLogView from './views/AuditLogView.vue'
 import RecordingsListView from './views/RecordingsListView.vue'
+import ChatView from './views/ChatView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -39,6 +40,7 @@ const router = createRouter({
     { path: '/meetings/:id', name: 'meeting-detail', component: MeetingDetailView },
     { path: '/action-items', name: 'action-items', component: ActionItemsView },
     { path: '/search', name: 'search', component: SearchView },
+    { path: '/chat', name: 'chat', component: ChatView },
     { path: '/rooms', name: 'rooms', component: RoomListView },
     { path: '/rooms/calendar', name: 'room-calendar', component: RoomCalendarView },
     { path: '/analysis', name: 'analysis', component: MeetingAnalysisView },

@@ -1,6 +1,7 @@
 <script setup>
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
+import { chatWithMeeting } from '../services/api.js'
 
 const { isDark } = useDarkMode()
 
@@ -25,8 +26,11 @@ const messages = ref([])
 // 입력 필드
 const inputText = ref('')
 
-// 타이핑 인디케이터
-const isTyping = ref(false)
+// 로딩 상태
+const isLoading = ref(false)
+
+// 채팅 히스토리 (API 전달용)
+const chatHistory = ref([])
 
 // 메시지 영역 스크롤 ref
 const messagesContainer = ref(null)
@@ -51,68 +55,10 @@ async function scrollToBottom() {
   }
 }
 
-// Mock AI 응답 생성
-function generateResponse(question) {
-  const q = question.toLowerCase()
-
-  if (q.includes('결정')) {
-    // 트랜스크립트에서 결정사항 관련 내용 추출 시도
-    const decisionTexts = props.transcript
-      .filter(t => t.text.includes('결정') || t.text.includes('확정') || t.text.includes('합의'))
-      .map(t => `- [${t.speaker}] ${t.text}`)
-
-    if (decisionTexts.length > 0) {
-      return `이 회의에서 발견된 핵심 결정사항입니다:\n\n${decisionTexts.join('\n')}`
-    }
-    return '이 회의에서 명시적인 결정사항을 찾지 못했습니다. 회의 요약을 참고해 주세요.'
-  }
-
-  if (q.includes('액션') || q.includes('할일') || q.includes('할 일')) {
-    const actionTexts = props.transcript
-      .filter(t =>
-        t.text.includes('해야') || t.text.includes('진행') ||
-        t.text.includes('담당') || t.text.includes('완료') ||
-        t.text.includes('확인')
-      )
-      .map(t => `- [${t.speaker}] ${t.text}`)
-
-    if (actionTexts.length > 0) {
-      return `회의에서 도출된 액션 아이템입니다:\n\n${actionTexts.join('\n')}`
-    }
-    return '트랜스크립트에서 명확한 액션 아이템을 추출하지 못했습니다.'
-  }
-
-  if (q.includes('요약')) {
-    if (props.aiSummary) {
-      return `회의 요약:\n\n${props.aiSummary}`
-    }
-    return 'AI 요약이 아직 생성되지 않았습니다.'
-  }
-
-  if (q.includes('주제') || q.includes('논의')) {
-    // 발언자별 발언 횟수 분석
-    const speakerCount = {}
-    props.transcript.forEach(t => {
-      speakerCount[t.speaker] = (speakerCount[t.speaker] || 0) + 1
-    })
-    const topSpeakers = Object.entries(speakerCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name, count]) => `- ${name}: ${count}회 발언`)
-
-    if (topSpeakers.length > 0) {
-      return `회의 참여도 분석:\n\n${topSpeakers.join('\n')}\n\n가장 활발하게 논의에 참여한 참석자를 기준으로 주요 주제를 파악할 수 있습니다.`
-    }
-    return '트랜스크립트 데이터가 부족하여 주제 분석이 어렵습니다.'
-  }
-
-  return '해당 질문에 대한 답변을 찾고 있습니다...'
-}
-
 // 메시지 전송
 async function sendMessage(text) {
   const question = text || inputText.value.trim()
-  if (!question) return
+  if (!question || isLoading.value) return
 
   // 사용자 메시지 추가
   messages.value.push({
@@ -122,26 +68,32 @@ async function sendMessage(text) {
   })
 
   inputText.value = ''
+  isLoading.value = true
   await scrollToBottom()
 
-  // 타이핑 인디케이터 표시
-  isTyping.value = true
-  await scrollToBottom()
+  try {
+    const result = await chatWithMeeting(props.meetingId, question, chatHistory.value)
+    const answer = result.data?.answer || result.answer || '응답을 받지 못했습니다.'
 
-  // Mock 응답 지연 (800~1500ms)
-  const delay = 800 + Math.random() * 700
-  await new Promise(resolve => setTimeout(resolve, delay))
+    messages.value.push({
+      role: 'ai',
+      content: answer,
+      timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    })
 
-  isTyping.value = false
-
-  // AI 응답 추가
-  messages.value.push({
-    role: 'ai',
-    content: generateResponse(question),
-    timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-  })
-
-  await scrollToBottom()
+    chatHistory.value.push({ role: 'user', content: question })
+    chatHistory.value.push({ role: 'assistant', content: answer })
+  } catch (err) {
+    messages.value.push({
+      role: 'ai',
+      content: `오류: ${err.message}`,
+      error: true,
+      timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+    })
+  } finally {
+    isLoading.value = false
+    await scrollToBottom()
+  }
 }
 
 // 빠른 질문 클릭
@@ -265,9 +217,9 @@ function handleKeydown(e) {
             <div class="max-w-[85%]">
               <div
                 class="px-3.5 py-2.5 rounded-2xl rounded-bl-md text-sm whitespace-pre-line"
-                :class="isDark
-                  ? 'bg-slate-700 text-slate-200'
-                  : 'bg-slate-100 text-slate-800'"
+                :class="msg.error
+                  ? (isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700')
+                  : (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800')"
               >
                 {{ msg.content }}
               </div>
@@ -278,8 +230,8 @@ function handleKeydown(e) {
           </div>
         </template>
 
-        <!-- 타이핑 인디케이터 -->
-        <div v-if="isTyping" class="flex justify-start">
+        <!-- 로딩 인디케이터 -->
+        <div v-if="isLoading" class="flex justify-start">
           <div
             class="px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-1.5"
             :class="isDark ? 'bg-slate-700' : 'bg-slate-100'"
@@ -338,14 +290,15 @@ function handleKeydown(e) {
             placeholder="회의 내용에 대해 질문하세요..."
             class="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
             :class="isDark ? 'text-slate-100' : 'text-slate-900'"
+            :disabled="isLoading"
             @keydown="handleKeydown"
           />
           <button
             class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0"
-            :class="inputText.trim()
+            :class="inputText.trim() && !isLoading
               ? (isDark ? 'bg-primary-600 text-white hover:bg-primary-500' : 'bg-primary-500 text-white hover:bg-primary-600')
               : (isDark ? 'text-slate-600' : 'text-slate-300')"
-            :disabled="!inputText.trim()"
+            :disabled="!inputText.trim() || isLoading"
             @click="sendMessage()"
           >
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

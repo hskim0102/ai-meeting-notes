@@ -391,3 +391,29 @@ export async function transcribeRecording(id, language = 'ko') {
   if (!res.ok) throw new Error(data.error || 'STT 변환 실패')
   return data
 }
+
+// ─────────────────────────────────────────────────
+// 챗봇 API
+// ─────────────────────────────────────────────────
+
+export async function chatWithMeeting(meetingId, question, history = []) {
+  const res = await fetch(`${API_BASE}/chat/meeting/${meetingId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, history }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '챗봇 질문 실패')
+  return data
+}
+
+export async function chatWithSearch(question, history = []) {
+  const res = await fetch(`${API_BASE}/chat/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, history }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '검색 챗봇 질문 실패')
+  return data
+}

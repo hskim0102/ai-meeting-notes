@@ -31,6 +31,7 @@ const navItems = [
   { name: '리포트', path: '/reports', icon: 'report', shortcut: '' },
   { name: '회의 검색', path: '/search', icon: 'search', shortcut: '⌘K' },
   { name: '회의실 예약', path: '/rooms', icon: 'rooms', shortcut: '' },
+  { name: 'AI 챗봇', path: '/chat', icon: 'chat', shortcut: '' },
 ]
 
 const isActive = (path) => {
@@ -39,6 +40,7 @@ const isActive = (path) => {
   if (path === '/recordings') return route.path.startsWith('/recordings')
   if (path === '/meetings') return route.path.startsWith('/meetings') && route.path !== '/meetings/new'
   if (path === '/rooms') return route.path.startsWith('/rooms')
+  if (path === '/chat') return route.path === '/chat'
   return route.path.startsWith(path)
 }
 </script>
@@ -145,6 +147,10 @@ const isActive = (path) => {
         <!-- Rooms -->
         <svg v-if="item.icon === 'rooms'" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 0h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+        </svg>
+        <!-- Chat -->
+        <svg v-if="item.icon === 'chat'" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
         </svg>
 
         <!-- 이름 (접힘 모드 제외) -->

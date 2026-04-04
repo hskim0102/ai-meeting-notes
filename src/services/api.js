@@ -189,6 +189,14 @@ export async function sendMeetingEmail(id, payload) {
   return data
 }
 
+/**
+ * 대시보드 차트 데이터 조회 (DB)
+ */
+export async function fetchChartData(signal) {
+  const res = await fetch('/api/meetings/chart-data', { signal })
+  return res.json()
+}
+
 // ─────────────────────────────────────────────────
 // 회의 검색 API
 // ─────────────────────────────────────────────────

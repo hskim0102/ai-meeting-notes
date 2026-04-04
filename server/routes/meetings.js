@@ -115,6 +115,97 @@ router.get('/stats', async (req, res) => {
   }
 })
 
+// ── 차트 데이터 조회 (대시보드 차트용) ──
+router.get('/chart-data', async (req, res) => {
+  try {
+    // 1. 주간 회의 빈도 (최근 4주, 요일별)
+    const weeklyRows = await query(`
+      SELECT
+        YEARWEEK(date, 1) as yw,
+        DAYOFWEEK(date) as dow,
+        COUNT(*) as cnt
+      FROM meetings
+      WHERE date >= DATE_SUB(CURDATE(), INTERVAL 28 DAY)
+      GROUP BY yw, dow
+      ORDER BY yw, dow
+    `)
+    const weeklyFrequency = weeklyRows.map(r => ({
+      yearWeek: r.yw,
+      dayOfWeek: r.dow,
+      count: r.cnt,
+    }))
+
+    // 2. 시간대별 분포
+    const hourlyRows = await query(`
+      SELECT
+        CAST(SUBSTRING(time, 1, 2) AS UNSIGNED) as hour,
+        COUNT(*) as cnt
+      FROM meetings
+      WHERE time IS NOT NULL AND time != ''
+      GROUP BY hour
+      ORDER BY hour
+    `)
+    const hourlyDistribution = hourlyRows.map(r => ({
+      hour: r.hour,
+      count: r.cnt,
+    }))
+
+    // 3. 키워드 트렌드 (최근 2주, 상위 키워드)
+    const keywordRows = await query(`
+      SELECT date, tags FROM meetings
+      WHERE date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+      AND tags IS NOT NULL
+      ORDER BY date
+    `)
+    const keywordMap = {}
+    for (const row of keywordRows) {
+      const tags = typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || [])
+      const dateStr = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : row.date
+      for (const tag of tags) {
+        if (!keywordMap[tag]) keywordMap[tag] = {}
+        keywordMap[tag][dateStr] = (keywordMap[tag][dateStr] || 0) + 1
+      }
+    }
+    const topKeywords = Object.entries(keywordMap)
+      .sort((a, b) => Object.values(b[1]).reduce((s, v) => s + v, 0) - Object.values(a[1]).reduce((s, v) => s + v, 0))
+      .slice(0, 5)
+    const keywordTrend = topKeywords.map(([keyword, dates]) => ({
+      keyword,
+      data: Object.entries(dates).map(([date, count]) => ({ date, count })),
+    }))
+
+    // 4. 화자 비율 (최근 5개 회의)
+    const speakerRows = await query(`
+      SELECT transcript FROM meetings
+      WHERE transcript IS NOT NULL AND transcript != '[]'
+      ORDER BY date DESC, time DESC
+      LIMIT 5
+    `)
+    const speakerDuration = {}
+    for (const row of speakerRows) {
+      const segments = typeof row.transcript === 'string' ? JSON.parse(row.transcript) : (row.transcript || [])
+      for (const seg of segments) {
+        if (seg.speaker) {
+          const dur = (seg.end || 0) - (seg.start || 0)
+          speakerDuration[seg.speaker] = (speakerDuration[seg.speaker] || 0) + dur
+        }
+      }
+    }
+    const speakerRatio = Object.entries(speakerDuration).map(([speaker, duration]) => ({
+      speaker,
+      totalDuration: Math.round(duration * 10) / 10,
+    }))
+
+    res.json({
+      success: true,
+      data: { weeklyFrequency, hourlyDistribution, keywordTrend, speakerRatio },
+    })
+  } catch (err) {
+    console.error('[차트 데이터 에러]', err.message)
+    res.status(500).json({ success: false, error: '차트 데이터 조회 실패' })
+  }
+})
+
 // ── 회의 상세 조회 ──
 router.get('/:id', async (req, res) => {
   try {

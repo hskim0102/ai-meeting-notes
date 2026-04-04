@@ -12,6 +12,7 @@
 
 import { Router } from 'express'
 import { summarizeWithDify } from '../services/difyService.js'
+import { validate, summarizeSchema } from '../services/validators.js'
 
 const router = Router()
 
@@ -19,17 +20,10 @@ const router = Router()
 // POST /api/summarize - 회의록 요약 엔드포인트
 // ─────────────────────────────────────────────────
 
-router.post('/', async (req, res) => {
+router.post('/', validate(summarizeSchema), async (req, res) => {
   try {
     // ── 1단계: 요청 본문에서 전사 텍스트 추출 ──
     const { transcript } = req.body
-
-    if (!transcript || typeof transcript !== 'string' || transcript.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: '요약할 회의 스크립트(transcript)가 전송되지 않았습니다.',
-      })
-    }
 
     console.log(`\n${'─'.repeat(50)}`)
     console.log(`[요약] 요청 수신: ${transcript.length}자`)

@@ -24,7 +24,8 @@
     "openai": "^6.27.0",
     "uuid": "^13.0.0",
     "vue": "^3.5.30",
-    "vue-router": "^4.6.4"
+    "vue-router": "^4.6.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",

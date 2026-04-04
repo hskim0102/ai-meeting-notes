@@ -53,10 +53,10 @@ const tags = computed(() => props.meeting.tags || [])
 <template>
   <router-link
     :to="`/meetings/${meeting.id}`"
-    class="block rounded-xl border p-5 transition-all group"
+    class="block rounded-2xl border p-5 transition-all group"
     :class="isDark
-      ? 'bg-slate-800 border-slate-700 hover:border-primary-500/50 hover:shadow-lg hover:shadow-primary-500/5'
-      : 'bg-white border-slate-200 hover:shadow-md hover:border-primary-200'"
+      ? 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 hover:shadow-lg hover:shadow-primary-500/5 hover:-translate-y-0.5'
+      : 'bg-white border-slate-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-primary-200'"
   >
     <div class="flex items-start justify-between mb-3">
       <div class="flex-1 min-w-0">

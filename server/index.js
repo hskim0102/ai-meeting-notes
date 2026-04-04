@@ -23,6 +23,7 @@ import roomsRouter from './routes/rooms.js'
 import searchRouter from './routes/search.js'
 import meetingsRouter from './routes/meetings.js'
 import recordingsRouter from './routes/recordings.js'
+import chatRouter from './routes/chat.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -89,6 +90,9 @@ app.use('/api/meetings', meetingsRouter)
 // 녹음 보관 엔드포인트
 app.use('/api/recordings', recordingsRouter)
 
+// 챗봇 Q&A 엔드포인트
+app.use('/api/chat', chatRouter)
+
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {
   res.json({
@@ -118,6 +122,8 @@ app.get('/api', (req, res) => {
       'GET /api/recordings/:id/file': '오디오 파일 스트리밍',
       'DELETE /api/recordings/:id': '녹음 삭제',
       'POST /api/recordings/:id/transcribe': '저장된 녹음 STT 변환',
+      'POST /api/chat/meeting/:id': '단일 회의 Q&A 챗봇',
+      'POST /api/chat/search': '전체 회의 검색 Q&A 챗봇',
     },
   })
 })

@@ -33,6 +33,11 @@ function formatMeeting(row) {
     actionItems: parseJson(row.action_items),
     sentiment: row.sentiment,
     transcript: parseJson(row.transcript),
+    speakerMap: (() => {
+      if (!row.speaker_map) return null
+      if (typeof row.speaker_map === 'string') { try { return JSON.parse(row.speaker_map) } catch { return null } }
+      return row.speaker_map
+    })(),
     createdAt: row.created_at,
   }
 }
@@ -131,7 +136,7 @@ router.post('/', async (req, res) => {
       title, date, time, duration,
       participants, status, tags,
       aiSummary, keyDecisions, actionItems,
-      sentiment, transcript, fullText,
+      sentiment, transcript, fullText, speakerMap,
     } = req.body
 
     if (!title) {
@@ -142,8 +147,8 @@ router.post('/', async (req, res) => {
     const meetingTime = time || new Date().toTimeString().slice(0, 5)
 
     const result = await query(
-      `INSERT INTO meetings (title, date, time, duration, participants, status, tags, ai_summary, key_decisions, action_items, sentiment, transcript, full_text)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO meetings (title, date, time, duration, participants, status, tags, ai_summary, key_decisions, action_items, sentiment, transcript, full_text, speaker_map)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title,
         meetingDate,
@@ -158,6 +163,7 @@ router.post('/', async (req, res) => {
         sentiment || 'neutral',
         JSON.stringify(transcript || []),
         fullText || '',
+        speakerMap ? JSON.stringify(speakerMap) : null,
       ]
     )
 
@@ -184,7 +190,7 @@ router.put('/:id', async (req, res) => {
       title, date, time, duration,
       participants, status, tags,
       aiSummary, keyDecisions, actionItems,
-      sentiment, transcript, fullText,
+      sentiment, transcript, fullText, speakerMap,
     } = req.body
 
     await query(
@@ -192,7 +198,8 @@ router.put('/:id', async (req, res) => {
         title = ?, date = ?, time = ?, duration = ?,
         participants = ?, status = ?, tags = ?,
         ai_summary = ?, key_decisions = ?, action_items = ?,
-        sentiment = ?, transcript = ?, full_text = ?
+        sentiment = ?, transcript = ?, full_text = ?,
+        speaker_map = ?
        WHERE id = ?`,
       [
         title || existing.title,
@@ -208,6 +215,7 @@ router.put('/:id', async (req, res) => {
         sentiment || existing.sentiment,
         transcript ? JSON.stringify(transcript) : existing.transcript,
         fullText !== undefined ? fullText : existing.full_text,
+        speakerMap !== undefined ? JSON.stringify(speakerMap) : existing.speaker_map,
         req.params.id,
       ]
     )

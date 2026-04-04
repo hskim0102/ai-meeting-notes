@@ -55,6 +55,7 @@ async function run() {
       sentiment ENUM('positive', 'negative', 'neutral') DEFAULT 'neutral' COMMENT '회의 분위기',
       transcript JSON COMMENT '발언 기록 [{"speaker","time","text"}]',
       full_text TEXT COMMENT 'STT 전체 텍스트 (검색용)',
+      speaker_map JSON DEFAULT NULL COMMENT '화자 이름 매핑 {"SPEAKER_00": "김부장"}',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_date (date),

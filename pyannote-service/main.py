@@ -45,6 +45,7 @@ async def health():
 @app.post("/diarize")
 async def diarize(file: UploadFile = File(...)):
     """오디오 파일을 받아 화자 세그먼트를 반환"""
+    tmp_path = None
     suffix = Path(file.filename).suffix if file.filename else ".wav"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         content = await file.read()
@@ -75,7 +76,8 @@ async def diarize(file: UploadFile = File(...)):
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        os.unlink(tmp_path)
+        if tmp_path:
+            os.unlink(tmp_path)
 
 
 if __name__ == "__main__":

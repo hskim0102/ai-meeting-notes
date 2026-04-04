@@ -27,7 +27,7 @@ const isLoginPage = computed(() => route.path === '/login')
     <main class="flex-1 overflow-y-auto pb-16 md:pb-0">
       <router-view v-slot="{ Component }">
         <Transition name="page" mode="out-in">
-          <component :is="Component" :key="$route.path" />
+          <component :is="Component" :key="$route.fullPath" />
         </Transition>
       </router-view>
     </main>

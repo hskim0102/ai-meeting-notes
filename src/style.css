@@ -73,24 +73,18 @@ body.dark {
   background: var(--color-slate-600);
 }
 
-/* 페이지 전환 애니메이션 - 방향성 슬라이드 */
+/* 페이지 전환 애니메이션 - 경량 페이드 */
 .page-enter-active {
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+  transition: opacity 0.15s ease-out;
 }
 .page-leave-active {
-  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
+  transition: opacity 0.1s ease-in;
 }
 .page-enter-from {
   opacity: 0;
-  transform: translateX(30px);
-}
-.page-enter-to {
-  opacity: 1;
-  transform: translateX(0);
 }
 .page-leave-to {
   opacity: 0;
-  transform: translateX(-15px);
 }
 
 /* 스켈레톤 로딩 애니메이션 */

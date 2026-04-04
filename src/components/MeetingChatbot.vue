@@ -125,24 +125,28 @@ function handleKeydown(e) {
     </svg>
   </button>
 
-  <!-- 채팅 패널 -->
-  <Transition
-    enter-active-class="transition-all duration-200 ease-out"
-    leave-active-class="transition-all duration-150 ease-in"
-    enter-from-class="opacity-0 translate-y-4 scale-95"
-    leave-to-class="opacity-0 translate-y-4 scale-95"
-  >
+  <!-- 오버레이 -->
+  <Transition name="sidebar-overlay">
     <div
       v-if="isOpen"
-      class="fixed bottom-6 right-6 w-[400px] max-h-[500px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden z-50"
+      class="fixed inset-0 bg-black/30 z-40"
+      @click="isOpen = false"
+    ></div>
+  </Transition>
+
+  <!-- 채팅 슬라이드 패널 -->
+  <Transition name="chat-panel">
+    <div
+      v-if="isOpen"
+      class="fixed top-0 right-0 h-full w-[380px] z-50 flex flex-col border-l shadow-2xl"
       :class="isDark
-        ? 'bg-slate-800 border-slate-700 shadow-black/40'
+        ? 'bg-zinc-900 border-zinc-800 shadow-black/40'
         : 'bg-white border-slate-200 shadow-slate-300/40'"
     >
       <!-- 헤더 -->
       <div
         class="flex items-center justify-between px-4 py-3 border-b shrink-0"
-        :class="isDark ? 'border-slate-700' : 'border-slate-200'"
+        :class="isDark ? 'border-zinc-800' : 'border-slate-200'"
       >
         <div class="flex items-center gap-2">
           <div class="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -159,7 +163,7 @@ function handleKeydown(e) {
         <button
           class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
           :class="isDark
-            ? 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+            ? 'text-slate-400 hover:bg-zinc-800 hover:text-slate-200'
             : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'"
           @click="togglePanel"
         >
@@ -173,13 +177,12 @@ function handleKeydown(e) {
       <div
         ref="messagesContainer"
         class="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-        style="min-height: 200px; max-height: 340px;"
       >
         <!-- 초기 안내 메시지 -->
         <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full py-6">
           <div
             class="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-            :class="isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-400'"
+            :class="isDark ? 'bg-zinc-800 text-slate-400' : 'bg-slate-100 text-slate-400'"
           >
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -219,7 +222,7 @@ function handleKeydown(e) {
                 class="px-3.5 py-2.5 rounded-2xl rounded-bl-md text-sm whitespace-pre-line"
                 :class="msg.error
                   ? (isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700')
-                  : (isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-100 text-slate-800')"
+                  : (isDark ? 'bg-zinc-800 text-slate-200' : 'bg-slate-100 text-slate-800')"
               >
                 {{ msg.content }}
               </div>
@@ -234,21 +237,18 @@ function handleKeydown(e) {
         <div v-if="isLoading" class="flex justify-start">
           <div
             class="px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-1.5"
-            :class="isDark ? 'bg-slate-700' : 'bg-slate-100'"
+            :class="isDark ? 'bg-zinc-800' : 'bg-slate-100'"
           >
             <span
-              class="w-2 h-2 rounded-full animate-bounce"
-              :class="isDark ? 'bg-slate-400' : 'bg-slate-400'"
+              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
               style="animation-delay: 0ms;"
             />
             <span
-              class="w-2 h-2 rounded-full animate-bounce"
-              :class="isDark ? 'bg-slate-400' : 'bg-slate-400'"
+              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
               style="animation-delay: 150ms;"
             />
             <span
-              class="w-2 h-2 rounded-full animate-bounce"
-              :class="isDark ? 'bg-slate-400' : 'bg-slate-400'"
+              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
               style="animation-delay: 300ms;"
             />
           </div>
@@ -265,7 +265,7 @@ function handleKeydown(e) {
           :key="q"
           class="text-xs px-3 py-1.5 rounded-full border transition-colors"
           :class="isDark
-            ? 'border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-slate-500'
+            ? 'border-zinc-700 text-slate-300 hover:bg-zinc-800 hover:border-zinc-600'
             : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'"
           @click="askQuickQuestion(q)"
         >
@@ -276,12 +276,12 @@ function handleKeydown(e) {
       <!-- 입력 영역 -->
       <div
         class="px-4 py-3 border-t shrink-0"
-        :class="isDark ? 'border-slate-700' : 'border-slate-200'"
+        :class="isDark ? 'border-zinc-800' : 'border-slate-200'"
       >
         <div
           class="flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors"
           :class="isDark
-            ? 'bg-slate-900 border-slate-600 focus-within:border-primary-500'
+            ? 'bg-zinc-950 border-zinc-700 focus-within:border-primary-500'
             : 'bg-slate-50 border-slate-200 focus-within:border-primary-400'"
         >
           <input
@@ -310,3 +310,22 @@ function handleKeydown(e) {
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.chat-panel-enter-active,
+.chat-panel-leave-active {
+  transition: transform 0.25s ease-out;
+}
+.chat-panel-enter-from,
+.chat-panel-leave-to {
+  transform: translateX(100%);
+}
+.sidebar-overlay-enter-active,
+.sidebar-overlay-leave-active {
+  transition: opacity 0.2s ease;
+}
+.sidebar-overlay-enter-from,
+.sidebar-overlay-leave-to {
+  opacity: 0;
+}
+</style>

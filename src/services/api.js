@@ -9,10 +9,13 @@ const API_BASE = '/api'
  * @param {function} onProgress - 업로드 진행률 콜백 (0~100)
  * @returns {Promise<object>} - { success, data: { fullText, segments, meta } }
  */
-export async function transcribeAudio(file, language = 'ko', onProgress = null) {
+export async function transcribeAudio(file, language = 'ko', onProgress = null, enableDiarization = false) {
   const formData = new FormData()
   formData.append('audio', file)
   formData.append('language', language)
+  if (enableDiarization) {
+    formData.append('enableDiarization', 'true')
+  }
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -153,6 +156,20 @@ export async function updateMeeting(id, meeting) {
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '회의 수정 실패')
+  return data
+}
+
+/**
+ * 회의 화자 이름 매핑 업데이트
+ */
+export async function updateSpeakerMap(id, speakerMap) {
+  const res = await fetch(`${API_BASE}/meetings/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ speakerMap }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '화자 매핑 수정 실패')
   return data
 }
 

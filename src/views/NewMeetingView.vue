@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDarkMode } from '../composables/useDarkMode.js'
 import AudioUploader from '../components/AudioUploader.vue'
@@ -22,6 +22,9 @@ const steps = [
 
 // 입력 모드: 'record' (실시간 녹음) | 'upload' (파일 업로드)
 const inputMode = ref('record')
+
+// 화자 분리 옵션
+const enableDiarization = ref(false)
 
 // 전사 결과 데이터
 const transcriptResult = ref(null)
@@ -102,9 +105,9 @@ async function saveToDb() {
       .map(p => p.trim())
       .filter(Boolean)
 
-    // STT segments → transcript 배열 변환
+    // STT segments → transcript 배열 변환 (화자 분리 시 speaker 필드 보존)
     const transcript = (transcriptResult.value?.segments || []).map(seg => ({
-      speaker: '화자',
+      speaker: seg.speaker || '화자',
       time: formatTime(seg.start),
       text: seg.text,
     }))
@@ -296,9 +299,17 @@ function goToStep(step) {
         </div>
       </div>
 
+      <!-- 화자 분리 옵션 -->
+      <div class="mb-4 px-1">
+        <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+          <input type="checkbox" v-model="enableDiarization" class="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+          화자 분리 (누가 말했는지 자동 구분)
+        </label>
+      </div>
+
       <!-- 입력 컴포넌트 -->
-      <LiveRecorder v-if="inputMode === 'record'" @transcribed="onTranscribed" />
-      <AudioUploader v-else @transcribed="onTranscribed" />
+      <LiveRecorder v-if="inputMode === 'record'" :enable-diarization="enableDiarization" @transcribed="onTranscribed" />
+      <AudioUploader v-else :enable-diarization="enableDiarization" @transcribed="onTranscribed" />
     </div>
 
     <!-- ════════════════════════════════════════════════ -->

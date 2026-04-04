@@ -7,7 +7,7 @@ import SkeletonLoader from '../components/SkeletonLoader.vue'
 import MeetingChatbot from '../components/MeetingChatbot.vue'
 import SpeakerTimeline from '../components/SpeakerTimeline.vue'
 import CollaborationIndicator from '../components/CollaborationIndicator.vue'
-import { fetchMeeting, updateMeeting, sendMeetingEmail } from '../services/api.js'
+import { fetchMeeting, updateMeeting, sendMeetingEmail, updateSpeakerMap } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
@@ -46,7 +46,14 @@ const emailForm = reactive({
 onMounted(async () => {
   try {
     const res = await fetchMeeting(route.params.id)
-    if (res.success) meetingData.value = res.data
+    if (res.success) {
+      meetingData.value = res.data
+      if (res.data.speakerMap) {
+        speakerMap.value = typeof res.data.speakerMap === 'string'
+          ? JSON.parse(res.data.speakerMap)
+          : res.data.speakerMap
+      }
+    }
   } catch (err) {
     console.warn('[회의 상세] DB 조회 실패, Mock 데이터 사용:', err.message)
     meetingData.value = fallbackMeetings.find(m => m.id === Number(route.params.id)) || null
@@ -77,6 +84,39 @@ const speakerColors = computed(() => {
 })
 
 const hasTranscript = computed(() => meeting.value?.transcript?.length > 0)
+
+// ── 화자 이름 매핑 (SPEAKER_00 → 실제 이름) ──
+const speakerMap = ref({})
+const editingSpeaker = ref(null)
+const editingName = ref('')
+
+const getSpeakerName = (speakerId) => {
+  if (!speakerId) return null
+  return speakerMap.value[speakerId] || speakerId.replace('SPEAKER_', '화자')
+}
+
+const getSpeakerColor = (speakerId) => {
+  if (!speakerId) return ''
+  const colors = ['bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200', 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200', 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200', 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200']
+  const speakers = [...new Set((meeting.value?.transcript || []).map(s => s.speaker).filter(Boolean))]
+  const idx = speakers.indexOf(speakerId)
+  return colors[idx % colors.length]
+}
+
+const saveSpeakerName = async (speakerId) => {
+  speakerMap.value[speakerId] = editingName.value
+  editingSpeaker.value = null
+  try {
+    await updateSpeakerMap(meeting.value.id, speakerMap.value)
+  } catch (err) {
+    console.error('화자 매핑 저장 실패:', err)
+  }
+}
+
+function openSpeakerEdit(speakerId) {
+  editingSpeaker.value = speakerId
+  editingName.value = speakerMap.value[speakerId] || getSpeakerName(speakerId)
+}
 
 // ── 편집 진입/취소 ──
 function startEditing() {
@@ -375,7 +415,11 @@ const sentimentColor = computed(() => {
       <!-- ===== Left Column: Transcript (60%) ===== -->
       <div v-if="hasTranscript" class="w-full lg:w-[60%] space-y-6">
         <!-- 화자 분리 타임라인 -->
-        <SpeakerTimeline :transcript="meeting.transcript" />
+        <SpeakerTimeline
+          :transcript="meeting.transcript"
+          :speaker-map="speakerMap"
+          @edit-speaker="openSpeakerEdit"
+        />
       </div>
 
       <!-- ===== Right Column: AI Summary Panel (40%, or full width if no transcript) ===== -->
@@ -554,6 +598,41 @@ const sentimentColor = computed(() => {
     :transcript="meeting.transcript || []"
     :ai-summary="meeting.aiSummary || ''"
   />
+
+  <!-- 화자 이름 편집 모달 -->
+  <Teleport to="body">
+    <div v-if="editingSpeaker" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="editingSpeaker = null"></div>
+      <div class="relative rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6" :class="isDark ? 'bg-slate-800' : 'bg-white'">
+        <h2 class="text-base font-semibold mb-1" :class="isDark ? 'text-slate-100' : 'text-slate-900'">화자 이름 변경</h2>
+        <p class="text-xs mb-4" :class="isDark ? 'text-slate-400' : 'text-slate-500'">{{ editingSpeaker }} 화자의 이름을 입력하세요</p>
+        <input
+          v-model="editingName"
+          type="text"
+          placeholder="예: 김부장"
+          class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent mb-4"
+          :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-500' : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400'"
+          @keyup.enter="saveSpeakerName(editingSpeaker)"
+          @keyup.esc="editingSpeaker = null"
+        />
+        <div class="flex justify-end gap-2">
+          <button
+            @click="editingSpeaker = null"
+            class="px-4 py-2 text-sm font-medium border rounded-lg transition-colors"
+            :class="isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+          >
+            취소
+          </button>
+          <button
+            @click="saveSpeakerName(editingSpeaker)"
+            class="px-4 py-2 text-sm font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 
   <!-- 메일 발송 모달 -->
   <Teleport to="body">

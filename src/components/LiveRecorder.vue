@@ -13,7 +13,10 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { transcribeAudio, saveRecording } from '../services/api.js'
 
-// ── 이벤트 정의: 전사 완료 시 부모 컴포넌트에 결과 전달 ──
+// ── Props 및 이벤트 정의 ──
+const props = defineProps({
+  enableDiarization: { type: Boolean, default: false },
+})
 const emit = defineEmits(['transcribed'])
 
 // ─────────────────────────────────────────────────
@@ -330,7 +333,7 @@ async function sendToServer() {
     // ── 기존 transcribeAudio API 함수로 서버 전송 ──
     const result = await transcribeAudio(file, 'ko', (progress) => {
       uploadProgress.value = progress
-    })
+    }, props.enableDiarization)
 
     if (result.success) {
       // 전사 성공 → 부모 컴포넌트에 결과 전달

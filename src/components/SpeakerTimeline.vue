@@ -6,7 +6,17 @@ const { isDark } = useDarkMode()
 
 const props = defineProps({
   transcript: { type: Array, default: () => [] },
+  speakerMap: { type: Object, default: () => ({}) },
 })
+
+const emit = defineEmits(['edit-speaker'])
+
+// 화자 ID를 표시 이름으로 변환 (speakerMap 우선, 없으면 SPEAKER_XX → 화자XX)
+const getSpeakerDisplayName = (speakerId) => {
+  if (!speakerId) return speakerId
+  if (props.speakerMap[speakerId]) return props.speakerMap[speakerId]
+  return speakerId.replace(/^SPEAKER_0*(\d+)$/, (_, n) => `화자${parseInt(n) + 1}`)
+}
 
 // 화자 색상 팔레트 (등장 순서대로 할당)
 const speakerColors = ['primary-500', 'success-500', 'warning-500', 'danger-500', 'purple-500']
@@ -133,12 +143,14 @@ const bubbleClass = (color) => {
             class="w-2.5 h-2.5 rounded-full shrink-0"
             :class="legendDotClass(speakerColorMap[speaker])"
           ></span>
-          <span
-            class="text-xs font-medium"
+          <button
+            class="text-xs font-medium underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70"
             :class="isDark ? 'text-slate-300' : 'text-slate-600'"
+            :title="'클릭하여 이름 변경'"
+            @click="emit('edit-speaker', speaker)"
           >
-            {{ speaker }}
-          </span>
+            {{ getSpeakerDisplayName(speaker) }}
+          </button>
         </div>
       </div>
 
@@ -162,7 +174,7 @@ const bubbleClass = (color) => {
             class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-semibold"
             :class="avatarBgClass(speakerColorMap[entry.speaker])"
           >
-            {{ getInitials(entry.speaker) }}
+            {{ getInitials(getSpeakerDisplayName(entry.speaker)) }}
           </div>
 
           <!-- 말풍선 -->
@@ -171,7 +183,7 @@ const bubbleClass = (color) => {
               class="text-xs font-medium mb-0.5 block"
               :class="isDark ? 'text-slate-400' : 'text-slate-500'"
             >
-              {{ entry.speaker }}
+              {{ getSpeakerDisplayName(entry.speaker) }}
             </span>
             <div
               class="rounded-lg border px-3 py-2 text-sm"
@@ -208,7 +220,7 @@ const bubbleClass = (color) => {
               class="text-xs font-medium w-16 shrink-0 truncate"
               :class="isDark ? 'text-slate-400' : 'text-slate-600'"
             >
-              {{ stat.speaker }}
+              {{ getSpeakerDisplayName(stat.speaker) }}
             </span>
 
             <!-- 바 차트 -->

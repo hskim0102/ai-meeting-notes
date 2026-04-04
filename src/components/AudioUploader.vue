@@ -2,6 +2,9 @@
 import { ref } from 'vue'
 import { transcribeAudio } from '../services/api.js'
 
+const props = defineProps({
+  enableDiarization: { type: Boolean, default: false },
+})
 const emit = defineEmits(['transcribed'])
 
 const isDragging = ref(false)
@@ -26,7 +29,7 @@ async function handleFile(file) {
       if (progress >= 100) {
         status.value = 'processing'
       }
-    })
+    }, props.enableDiarization)
 
     if (result.success) {
       emit('transcribed', result.data)

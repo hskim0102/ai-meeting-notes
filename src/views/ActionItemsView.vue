@@ -279,7 +279,7 @@ const completionRate = computed(() => {
         {{ filteredItems.length }}개 항목
       </div>
 
-      <div class="divide-y" :class="isDark ? 'divide-slate-700/50' : 'divide-slate-50'">
+      <TransitionGroup name="list" tag="div" class="divide-y" :class="isDark ? 'divide-slate-700/50' : 'divide-slate-50'">
         <ActionItemRow
           v-for="(item, i) in filteredItems"
           :key="`${item.text}-${item.assignee}-${i}`"
@@ -288,7 +288,7 @@ const completionRate = computed(() => {
           @toggle="toggleItem"
           @status-change="changeItemStatus"
         />
-      </div>
+      </TransitionGroup>
       <EmptyState
         v-if="filteredItems.length === 0 && filterStatus === 'all-active' && filterPriority === 'all'"
         type="celebration"

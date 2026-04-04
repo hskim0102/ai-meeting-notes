@@ -32,6 +32,14 @@ const isOverdue = computed(() => {
   return new Date(props.item.dueDate) < new Date()
 })
 
+const isImminent = computed(() => {
+  if (isDone.value || !props.item.dueDate) return false
+  const d = new Date(props.item.dueDate)
+  const threshold = new Date()
+  threshold.setDate(threshold.getDate() + 3)
+  return d > new Date() && d <= threshold
+})
+
 // 상태 설정
 const statusConfig = {
   pending:       { label: '대기',   color: 'slate' },
@@ -79,11 +87,14 @@ const closeDropdown = () => {
 
 <template>
   <div
-    class="flex items-start gap-3 py-3 px-4 rounded-lg transition-colors"
+    class="flex items-start gap-3 py-3 px-4 rounded-lg transition-all duration-300"
     :class="[
       isDark ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50',
-      isOverdue ? (isDark ? 'bg-danger-500/5 border-l-2 border-l-danger-500' : 'bg-danger-50/50 border-l-2 border-l-danger-500') : ''
+      isDone ? 'opacity-50' : '',
+      isOverdue ? (isDark ? 'bg-danger-500/5 border-l-2 border-l-danger-500' : 'bg-danger-50/50 border-l-2 border-l-danger-500') : '',
+      isImminent ? 'border-l-[3px] border-l-danger-500' : '',
     ]"
+    :style="isImminent ? 'box-shadow: -2px 0 8px rgba(239,68,68,0.15)' : ''"
   >
     <!-- 상태 버튼 (드롭다운 트리거) -->
     <div class="relative mt-0.5 shrink-0">

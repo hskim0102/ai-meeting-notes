@@ -1,38 +1,76 @@
 <script setup>
+import { ref, watch, onMounted } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
 const { isDark } = useDarkMode()
 
-defineProps({
+const props = defineProps({
   title: String,
   value: [String, Number],
   subtitle: String,
   color: { type: String, default: 'primary' },
   icon: String,
+  change: { type: Number, default: null },
 })
+
+// 카운트업 애니메이션
+const displayValue = ref(props.value)
+const animateCount = (target) => {
+  const numTarget = parseFloat(String(target).replace(/[^0-9.]/g, ''))
+  if (isNaN(numTarget)) { displayValue.value = target; return }
+
+  const prefix = String(target).match(/^[^0-9]*/)?.[0] || ''
+  const suffix = String(target).match(/[^0-9.]*$/)?.[0] || ''
+  const duration = 800
+  const start = performance.now()
+
+  const step = (now) => {
+    const progress = Math.min((now - start) / duration, 1)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    const current = Math.round(numTarget * eased)
+    displayValue.value = `${prefix}${current}${suffix}`
+    if (progress < 1) requestAnimationFrame(step)
+    else displayValue.value = target
+  }
+  requestAnimationFrame(step)
+}
+
+onMounted(() => animateCount(props.value))
+watch(() => props.value, (v) => animateCount(v))
 </script>
 
 <template>
   <div
-    class="rounded-xl p-5 border hover:shadow-md transition-shadow"
-    :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+    class="rounded-2xl p-5 border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+    :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
   >
     <div class="flex items-start justify-between">
       <div>
         <p class="text-sm mb-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">{{ title }}</p>
-        <p class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ value }}</p>
-        <p v-if="subtitle" class="text-xs mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ subtitle }}</p>
+        <p class="text-2xl font-bold tracking-tight tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">
+          {{ displayValue }}
+        </p>
+        <div class="flex items-center gap-2 mt-1">
+          <p v-if="subtitle" class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ subtitle }}</p>
+          <span
+            v-if="change !== null"
+            class="text-xs font-semibold flex items-center gap-0.5"
+            :class="change >= 0 ? 'text-success-500' : 'text-danger-500'"
+          >
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path v-if="change >= 0" stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M19.5 4.5l-15 15m0 0h11.25m-11.25 0V8.25" />
+            </svg>
+            {{ change >= 0 ? '+' : '' }}{{ change }}%
+          </span>
+        </div>
       </div>
       <div
-        class="w-10 h-10 rounded-lg flex items-center justify-center"
+        class="w-10 h-10 rounded-xl flex items-center justify-center"
         :class="{
-          'bg-primary-50 text-primary-500': color === 'primary' && !isDark,
-          'bg-primary-900/30 text-primary-400': color === 'primary' && isDark,
-          'bg-accent-50 text-accent-500': color === 'accent' && !isDark,
-          'bg-accent-600/20 text-accent-400': color === 'accent' && isDark,
-          'bg-success-50 text-success-500': color === 'success' && !isDark,
-          'bg-success-500/15 text-success-500': color === 'success' && isDark,
-          'bg-warning-50 text-warning-500': color === 'warning' && !isDark,
-          'bg-warning-500/15 text-warning-500': color === 'warning' && isDark,
+          'bg-gradient-to-br from-primary-500 to-accent-500 text-white': color === 'primary',
+          'bg-gradient-to-br from-accent-500 to-primary-500 text-white': color === 'accent',
+          'bg-gradient-to-br from-success-500 to-success-600 text-white': color === 'success',
+          'bg-gradient-to-br from-warning-500 to-warning-600 text-white': color === 'warning',
         }"
       >
         <svg v-if="icon === 'calendar'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">

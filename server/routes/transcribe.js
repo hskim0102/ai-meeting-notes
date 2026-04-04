@@ -22,6 +22,7 @@ import { fileURLToPath } from 'url'
 
 import { splitAudio, needsSplitting, getAudioMetadata } from '../services/audioSplitter.js'
 import { transcribeSingleFile, transcribeChunks, mergeTranscripts } from '../services/whisperService.js'
+import { mergeWithSpeakers } from '../services/diarizationMerger.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
 const __filename = fileURLToPath(import.meta.url)
@@ -151,6 +152,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
     // ── 요청 바디에서 언어 옵션 추출 (기본값: 한국어) ──
     const language = req.body.language || 'ko'
+    const enableDiarization = req.body.enableDiarization === 'true' || req.body.enableDiarization === true
 
     let transcript
 
@@ -199,6 +201,38 @@ router.post('/', upload.single('audio'), async (req, res) => {
       transcript = mergeTranscripts(chunkResults)
     }
 
+    // ── 2.5단계: 화자 분리 (선택 사항) ──
+    let diarizeResult = null
+    if (enableDiarization) {
+      const diarizeUrl = process.env.DIARIZE_SERVICE_URL || 'http://localhost:5000'
+      try {
+        console.log('[화자 분리] pyannote 서비스 호출 시작...')
+        const formData = new FormData()
+        const fileBuffer = fs.readFileSync(uploadedFilePath)
+        formData.append('file', new Blob([fileBuffer]), originalName)
+
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 300_000) // 5분 타임아웃
+
+        const diarizeRes = await fetch(`${diarizeUrl}/diarize`, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+
+        if (diarizeRes.ok) {
+          diarizeResult = await diarizeRes.json()
+          console.log(`[화자 분리] 완료: ${diarizeResult.num_speakers}명 감지, ${diarizeResult.segments.length}개 세그먼트`)
+          transcript.segments = mergeWithSpeakers(transcript.segments, diarizeResult.segments)
+        } else {
+          console.warn(`[화자 분리] 서비스 응답 오류 (HTTP ${diarizeRes.status}), 화자 분리 없이 계속 진행`)
+        }
+      } catch (err) {
+        console.warn(`[화자 분리] 실패 (${err.message}), 화자 분리 없이 계속 진행`)
+      }
+    }
+
     // ── 3단계: 오디오 메타데이터 추가 ──
     let metadata = {}
     try {
@@ -231,6 +265,10 @@ router.post('/', upload.single('audio'), async (req, res) => {
           language,
           audioBitrate: metadata.bitrate || null,
           audioFormat: metadata.format || null,
+          diarization: diarizeResult ? {
+            numSpeakers: diarizeResult.num_speakers,
+            processingTime: diarizeResult.processing_time_sec,
+          } : null,
         },
       },
     })

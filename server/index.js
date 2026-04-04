@@ -166,6 +166,7 @@ app.listen(PORT, async () => {
   console.log(`  OpenAI 키:  ${process.env.OPENAI_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
   console.log(`  Dify 키:   ${process.env.DIFY_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
   console.log(`  Dify URL:  ${process.env.DIFY_API_URL || '미설정'}`)
+  console.log(`  화자분리:  ${process.env.DIARIZE_SERVICE_URL || 'http://localhost:5000'} (pyannote)`)
   console.log('═══════════════════════════════════════════════')
   console.log('')
 })

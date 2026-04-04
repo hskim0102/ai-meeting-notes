@@ -25,6 +25,7 @@
 
   --color-warning-50: #fffbeb;
   --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
 
   --color-danger-50: #fef2f2;
   --color-danger-500: #ef4444;
@@ -39,18 +40,22 @@
   --color-slate-700: #334155;
   --color-slate-800: #1e293b;
   --color-slate-900: #0f172a;
+
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
 }
 
 body {
   margin: 0;
   font-family: 'Pretendard', system-ui, -apple-system, sans-serif;
-  background-color: var(--color-slate-50);
+  background-color: #fafaf9;
 }
 
 /* 다크 모드 body */
 .dark body,
 body.dark {
-  background-color: var(--color-slate-900);
+  background-color: var(--color-zinc-950);
 }
 
 /* Scrollbar styling */
@@ -68,23 +73,24 @@ body.dark {
   background: var(--color-slate-600);
 }
 
-/* 페이지 전환 애니메이션 */
+/* 페이지 전환 애니메이션 - 방향성 슬라이드 */
 .page-enter-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
 }
 .page-leave-active {
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease-in, transform 0.15s ease-in;
 }
 .page-enter-from {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateX(30px);
 }
 .page-enter-to {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
 }
 .page-leave-to {
   opacity: 0;
+  transform: translateX(-15px);
 }
 
 /* 스켈레톤 로딩 애니메이션 */
@@ -130,4 +136,37 @@ body.dark {
 .sidebar-overlay-enter-from,
 .sidebar-overlay-leave-to {
   opacity: 0;
+}
+
+/* prefers-reduced-motion 접근성 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 카운트업 숫자 정렬 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 리스트 stagger 애니메이션 */
+.list-enter-active {
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+.list-leave-active {
+  transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+}
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.list-move {
+  transition: transform 0.3s ease;
 }

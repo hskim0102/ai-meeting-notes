@@ -34,6 +34,18 @@ const filteredMeetings = computed(() => {
     return matchSearch && matchStatus
   })
 })
+
+const viewMode = ref('card') // 'card' | 'list'
+const dateFilter = ref('all') // 'all' | 'week' | 'month'
+
+const filteredByDate = computed(() => {
+  if (dateFilter.value === 'all') return filteredMeetings.value
+  const now = new Date()
+  const cutoff = new Date()
+  if (dateFilter.value === 'week') cutoff.setDate(now.getDate() - 7)
+  if (dateFilter.value === 'month') cutoff.setMonth(now.getMonth() - 1)
+  return filteredMeetings.value.filter(m => new Date(m.date) >= cutoff)
+})
 </script>
 
 <template>
@@ -74,14 +86,82 @@ const filteredMeetings = computed(() => {
           {{ opt.label }}
         </button>
       </div>
+
+      <!-- 뷰 모드 + 날짜 필터 -->
+      <div class="flex items-center gap-2">
+        <div class="flex rounded-lg border overflow-hidden" :class="isDark ? 'border-zinc-700' : 'border-slate-200'">
+          <button
+            v-for="opt in [{ key: 'all', label: '전체' }, { key: 'week', label: '이번 주' }, { key: 'month', label: '이번 달' }]"
+            :key="opt.key"
+            class="px-3 py-1.5 text-xs font-medium transition-colors"
+            :class="dateFilter === opt.key
+              ? 'bg-primary-500 text-white'
+              : isDark ? 'text-slate-400 hover:bg-zinc-800' : 'text-slate-500 hover:bg-slate-50'"
+            @click="dateFilter = opt.key"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+
+        <div class="flex rounded-lg border overflow-hidden" :class="isDark ? 'border-zinc-700' : 'border-slate-200'">
+          <button
+            class="p-1.5 transition-colors"
+            :class="viewMode === 'card'
+              ? 'bg-primary-500 text-white'
+              : isDark ? 'text-slate-400 hover:bg-zinc-800' : 'text-slate-500 hover:bg-slate-50'"
+            @click="viewMode = 'card'"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
+            </svg>
+          </button>
+          <button
+            class="p-1.5 transition-colors"
+            :class="viewMode === 'list'
+              ? 'bg-primary-500 text-white'
+              : isDark ? 'text-slate-400 hover:bg-zinc-800' : 'text-slate-500 hover:bg-slate-50'"
+            @click="viewMode = 'list'"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
 
-    <!-- Meeting list (즉시 렌더링) -->
-    <div class="space-y-3">
-      <MeetingCard v-for="meeting in filteredMeetings" :key="meeting.id" :meeting="meeting" />
+    <!-- 카드 뷰 -->
+    <div v-if="viewMode === 'card'" class="space-y-3">
+      <MeetingCard v-for="m in filteredByDate" :key="m.id" :meeting="m" />
     </div>
+
+    <!-- 리스트 뷰 (컴팩트) -->
+    <div v-else class="space-y-1">
+      <router-link
+        v-for="m in filteredByDate"
+        :key="m.id"
+        :to="`/meetings/${m.id}`"
+        class="flex items-center gap-4 px-4 py-3 rounded-xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+        :class="isDark ? 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700' : 'bg-white border-slate-200 hover:border-slate-300'"
+      >
+        <span class="text-xs font-mono tabular-nums w-20 shrink-0" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ m.date }}</span>
+        <span class="text-sm font-medium truncate flex-1" :class="isDark ? 'text-slate-200' : 'text-slate-800'">{{ m.title }}</span>
+        <span
+          class="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0"
+          :class="m.status === 'completed'
+            ? 'bg-success-50 text-success-600'
+            : m.status === 'in-progress'
+              ? 'bg-primary-50 text-primary-600'
+              : isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-500'"
+        >
+          {{ m.status === 'completed' ? '완료' : m.status === 'in-progress' ? '진행중' : '대기' }}
+        </span>
+        <span class="text-xs shrink-0" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ m.duration ? m.duration + '분' : '' }}</span>
+      </router-link>
+    </div>
+
     <EmptyState
-      v-if="filteredMeetings.length === 0 && meetings.length > 0"
+      v-if="filteredByDate.length === 0 && meetings.length > 0"
       type="search"
       title="검색 결과가 없습니다"
       description="다른 키워드로 검색하거나 필터를 변경해보세요."

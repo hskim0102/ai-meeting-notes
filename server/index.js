@@ -32,6 +32,7 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.SERVER_PORT || 3001
+export { app }
 
 // ─────────────────────────────────────────────────
 // 미들웨어 설정
@@ -159,20 +160,22 @@ app.use((err, req, res, next) => {
 // 서버 시작
 // ─────────────────────────────────────────────────
 
-app.listen(PORT, async () => {
-  const dbOk = await testConnection()
-  console.log('')
-  console.log('═══════════════════════════════════════════════')
-  console.log('  AI 스마트 회의록 백엔드 서버')
-  console.log('═══════════════════════════════════════════════')
-  console.log(`  서버 주소:  http://localhost:${PORT}`)
-  console.log(`  API 문서:   http://localhost:${PORT}/api`)
-  console.log(`  헬스체크:   http://localhost:${PORT}/api/transcribe/health`)
-  console.log(`  MySQL DB:  ${dbOk ? '연결됨 ✓' : '연결 실패 ✗'} (${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || '30306'})`)
-  console.log(`  OpenAI 키:  ${process.env.OPENAI_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
-  console.log(`  Dify 키:   ${process.env.DIFY_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
-  console.log(`  Dify URL:  ${process.env.DIFY_API_URL || '미설정'}`)
-  console.log(`  화자분리:  ${process.env.DIARIZE_SERVICE_URL || 'http://localhost:5000'} (pyannote)`)
-  console.log('═══════════════════════════════════════════════')
-  console.log('')
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, async () => {
+    const dbOk = await testConnection()
+    console.log('')
+    console.log('═══════════════════════════════════════════════')
+    console.log('  AI 스마트 회의록 백엔드 서버')
+    console.log('═══════════════════════════════════════════════')
+    console.log(`  서버 주소:  http://localhost:${PORT}`)
+    console.log(`  API 문서:   http://localhost:${PORT}/api`)
+    console.log(`  헬스체크:   http://localhost:${PORT}/api/transcribe/health`)
+    console.log(`  MySQL DB:  ${dbOk ? '연결됨 ✓' : '연결 실패 ✗'} (${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || '30306'})`)
+    console.log(`  OpenAI 키:  ${process.env.OPENAI_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
+    console.log(`  Dify 키:   ${process.env.DIFY_API_KEY ? '설정됨 ✓' : '미설정 ✗ (.env 파일 확인)'}`)
+    console.log(`  Dify URL:  ${process.env.DIFY_API_URL || '미설정'}`)
+    console.log(`  화자분리:  ${process.env.DIARIZE_SERVICE_URL || 'http://localhost:5000'} (pyannote)`)
+    console.log('═══════════════════════════════════════════════')
+    console.log('')
+  })
+}

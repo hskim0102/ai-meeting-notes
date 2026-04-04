@@ -25,7 +25,11 @@ const isLoginPage = computed(() => route.path === '/login')
   <div v-else class="flex h-screen overflow-hidden" :class="isDark ? 'dark bg-slate-900' : 'bg-slate-50'">
     <SidebarNav />
     <main class="flex-1 overflow-y-auto pb-16 md:pb-0">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <Transition name="page" mode="out-in">
+          <component :is="Component" :key="$route.path" />
+        </Transition>
+      </router-view>
     </main>
     <CommandPalette />
     <MobileBottomNav />

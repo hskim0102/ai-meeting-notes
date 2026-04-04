@@ -10,6 +10,7 @@ if ('serviceWorker' in navigator) {
 
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { MotionPlugin } from '@vueuse/motion'
 import './style.css'
 import App from './App.vue'
 
@@ -66,6 +67,7 @@ router.beforeEach((to, from, next) => {
 
 const app = createApp(App)
 app.use(router)
+app.use(MotionPlugin)
 
 // 라우터 초기 네비게이션 완료 후 앱 마운트 (transition out-in 빈 화면 방지)
 router.isReady().then(() => {

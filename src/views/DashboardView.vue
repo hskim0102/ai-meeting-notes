@@ -7,11 +7,16 @@ import ActionItemRow from '../components/ActionItemRow.vue'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import EmptyState from '../components/EmptyState.vue'
 import AutoAgenda from '../components/AutoAgenda.vue'
-import { fetchMeetings, fetchMeetingStats } from '../services/api.js'
+import BarChart from '../components/charts/BarChart.vue'
+import LineChart from '../components/charts/LineChart.vue'
+import DoughnutChart from '../components/charts/DoughnutChart.vue'
+import { chartColors } from '../components/charts/chartConfig.js'
+import { fetchMeetings, fetchMeetingStats, fetchChartData } from '../services/api.js'
 import { meetings as fallbackMeetings, stats as fallbackStats, upcomingMeetings as fallbackUpcoming, recentActionItems as fallbackActions } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
 const loading = ref(true)
+const chartData = ref(null)
 const stats = ref({ ...fallbackStats })
 const allMeetings = ref([...fallbackMeetings])
 const actionItems = ref([...fallbackActions])
@@ -39,6 +44,13 @@ onMounted(async () => {
     if (statsRes.success && statsRes.data) {
       stats.value = statsRes.data
     }
+    // 차트 데이터 로딩
+    try {
+      const chartRes = await fetchChartData(controller.signal)
+      if (chartRes.success && chartRes.data) {
+        chartData.value = chartRes.data
+      }
+    } catch { /* 차트 실패해도 대시보드는 표시 */ }
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.warn('[대시보드] DB 조회 실패, Mock 데이터 사용:', err.message)
@@ -108,6 +120,89 @@ const toggleItem = (item) => {
   item.done = !item.done
 }
 
+// 인사 텍스트
+const greetingText = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return '좋은 아침입니다'
+  if (hour < 18) return '좋은 오후입니다'
+  return '좋은 저녁입니다'
+})
+
+// 주간 빈도 Bar chart
+const weeklyChartData = computed(() => {
+  if (!chartData.value?.weeklyFrequency?.length) return null
+  const days = ['일', '월', '화', '수', '목', '금', '토']
+  const counts = new Array(7).fill(0)
+  for (const r of chartData.value.weeklyFrequency) {
+    counts[r.dayOfWeek - 1] += r.count
+  }
+  return {
+    labels: days,
+    datasets: [{
+      label: '회의 수',
+      data: counts,
+      backgroundColor: chartColors.primary,
+      borderRadius: 6,
+      barPercentage: 0.6,
+    }],
+  }
+})
+
+// 시간대 Area chart
+const hourlyChartData = computed(() => {
+  if (!chartData.value?.hourlyDistribution?.length) return null
+  const hours = Array.from({ length: 24 }, (_, i) => `${i}시`)
+  const counts = new Array(24).fill(0)
+  for (const r of chartData.value.hourlyDistribution) {
+    counts[r.hour] = r.count
+  }
+  return {
+    labels: hours,
+    datasets: [{
+      label: '회의 수',
+      data: counts,
+      borderColor: chartColors.accent,
+      backgroundColor: chartColors.accentLight,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+    }],
+  }
+})
+
+// 키워드 트렌드 Line chart
+const keywordChartData = computed(() => {
+  if (!chartData.value?.keywordTrend?.length) return null
+  const allDates = [...new Set(
+    chartData.value.keywordTrend.flatMap(k => k.data.map(d => d.date))
+  )].sort()
+  return {
+    labels: allDates.map(d => d.slice(5)),
+    datasets: chartData.value.keywordTrend.map((kw, i) => ({
+      label: kw.keyword,
+      data: allDates.map(d => kw.data.find(dd => dd.date === d)?.count || 0),
+      borderColor: chartColors.palette[i % chartColors.palette.length],
+      tension: 0.3,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+    })),
+  }
+})
+
+// 화자 비율 Doughnut chart
+const speakerChartData = computed(() => {
+  if (!chartData.value?.speakerRatio?.length) return null
+  return {
+    labels: chartData.value.speakerRatio.map(s => s.speaker),
+    datasets: [{
+      data: chartData.value.speakerRatio.map(s => s.totalDuration),
+      backgroundColor: chartColors.palette.slice(0, chartData.value.speakerRatio.length),
+      borderWidth: 0,
+    }],
+  }
+})
+
 const formatDuration = (min) => {
   if (!min) return ''
   if (min >= 60) return `${Math.floor(min / 60)}시간 ${min % 60}분`
@@ -140,7 +235,7 @@ const formatDuration = (min) => {
             {{ new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) }}
           </p>
           <p v-if="!loading" class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-white'">
-            {{ todaySummaryText }}
+            {{ greetingText }}. {{ todaySummaryText }}
           </p>
           <div v-else class="h-6 w-80 rounded skeleton-pulse bg-white/20"></div>
         </div>
@@ -170,6 +265,42 @@ const formatDuration = (min) => {
         <StatCard title="액션 아이템 완료" :value="`${stats.actionItemsCompleted}/${stats.actionItemsTotal}`" :subtitle="`${stats.actionItemsTotal ? Math.round(stats.actionItemsCompleted / stats.actionItemsTotal * 100) : 0}% 달성률`" color="success" icon="check" />
         <StatCard title="회의 분위기" :value="`${stats.avgSentiment}%`" subtitle="긍정 지수" color="warning" icon="smile" />
       </template>
+    </div>
+
+    <!-- 차트 그리드 -->
+    <div v-if="!loading && chartData" class="grid grid-cols-2 gap-6 mb-8">
+      <div
+        class="rounded-2xl border p-5"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
+      >
+        <h3 class="text-sm font-semibold mb-4" :class="isDark ? 'text-slate-300' : 'text-slate-700'">주간 회의 빈도</h3>
+        <BarChart v-if="weeklyChartData" :chart-data="weeklyChartData" :is-dark="isDark" :height="200" />
+        <p v-else class="text-xs text-center py-10" :class="isDark ? 'text-slate-500' : 'text-slate-400'">데이터 없음</p>
+      </div>
+      <div
+        class="rounded-2xl border p-5"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
+      >
+        <h3 class="text-sm font-semibold mb-4" :class="isDark ? 'text-slate-300' : 'text-slate-700'">시간대별 분포</h3>
+        <LineChart v-if="hourlyChartData" :chart-data="hourlyChartData" :is-dark="isDark" :height="200" />
+        <p v-else class="text-xs text-center py-10" :class="isDark ? 'text-slate-500' : 'text-slate-400'">데이터 없음</p>
+      </div>
+      <div
+        class="rounded-2xl border p-5"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
+      >
+        <h3 class="text-sm font-semibold mb-4" :class="isDark ? 'text-slate-300' : 'text-slate-700'">키워드 트렌드 (2주)</h3>
+        <LineChart v-if="keywordChartData" :chart-data="keywordChartData" :is-dark="isDark" :height="200" :options="{ showLegend: true }" />
+        <p v-else class="text-xs text-center py-10" :class="isDark ? 'text-slate-500' : 'text-slate-400'">데이터 없음</p>
+      </div>
+      <div
+        class="rounded-2xl border p-5"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
+      >
+        <h3 class="text-sm font-semibold mb-4" :class="isDark ? 'text-slate-300' : 'text-slate-700'">화자 비율 (최근 5개 회의)</h3>
+        <DoughnutChart v-if="speakerChartData" :chart-data="speakerChartData" :is-dark="isDark" :height="200" />
+        <p v-else class="text-xs text-center py-10" :class="isDark ? 'text-slate-500' : 'text-slate-400'">화자 분리 데이터 없음</p>
+      </div>
     </div>
 
     <!-- 진행 중인 회의 배너 -->
@@ -207,8 +338,8 @@ const formatDuration = (min) => {
     <div class="grid grid-cols-2 gap-6 mb-8">
       <!-- Left: 오늘의 일정 (타임라인) -->
       <div
-        class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+        class="rounded-2xl border p-5 transition-all duration-200"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
       >
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">오늘의 일정</h2>
@@ -314,8 +445,8 @@ const formatDuration = (min) => {
 
       <!-- Right: 긴급 액션아이템 -->
       <div
-        class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+        class="rounded-2xl border p-5 transition-all duration-200"
+        :class="isDark ? 'bg-zinc-900/80 backdrop-blur-xl border-zinc-800' : 'bg-white border-slate-200'"
       >
         <div class="flex items-center justify-between mb-5">
           <div class="flex items-center gap-2">

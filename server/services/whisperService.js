@@ -36,19 +36,34 @@ function getOpenAI() {
  * @param {string} language - 언어 코드 (기본값: 'ko')
  * @returns {Promise<object>} - Whisper API 응답 (segments 포함)
  */
-export async function transcribeSingleFile(filePath, language = 'ko') {
+export async function transcribeSingleFile(filePath, language = 'ko', maxRetries = 2) {
   console.log(`[Whisper] 전사 시작: ${filePath}`)
 
-  const response = await getOpenAI().audio.transcriptions.create({
-    file: fs.createReadStream(filePath),   // 파일 스트림으로 전송
-    model: 'whisper-1',                     // Whisper 모델 지정
-    language: language,                     // 한국어 우선 인식
-    response_format: 'verbose_json',        // 상세 JSON (타임스탬프 포함)
-    timestamp_granularities: ['segment'],   // 세그먼트 단위 시간 정보
-  })
+  let lastError
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await getOpenAI().audio.transcriptions.create({
+        file: fs.createReadStream(filePath),
+        model: 'whisper-1',
+        language: language,
+        response_format: 'verbose_json',
+        timestamp_granularities: ['segment'],
+      })
 
-  console.log(`[Whisper] 전사 완료: ${response.segments?.length || 0}개 세그먼트`)
-  return response
+      console.log(`[Whisper] 전사 완료: ${response.segments?.length || 0}개 세그먼트`)
+      return response
+    } catch (err) {
+      lastError = err
+      if (attempt < maxRetries && (err.status === 429 || err.status >= 500)) {
+        const delay = 2000 * Math.pow(2, attempt)
+        console.log(`[Whisper 재시도] ${err.message} - ${delay}ms 후 재시도 (${attempt + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      } else {
+        throw err
+      }
+    }
+  }
+  throw lastError
 }
 
 /**

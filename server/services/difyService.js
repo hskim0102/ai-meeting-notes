@@ -10,6 +10,8 @@
  * ─────────────────────────────────────────────────
  */
 
+import { retryFetch } from './retryFetch.js'
+
 // ── Dify API 타임아웃 설정 ──
 // LLM 응답은 긴 텍스트 처리 시 수십 초가 걸릴 수 있으므로 넉넉하게 설정
 const DIFY_TIMEOUT_MS = 120_000 // 120초 (2분)
@@ -69,25 +71,28 @@ export async function summarizeWithDify(transcript) {
 
   try {
     // ── 4단계: Dify 워크플로우 API 호출 ──
-    const response = await fetch(`${apiUrl}/workflows/run`, {
-      method: 'POST',
-      headers: {
-        // Bearer 토큰 인증 (서버 사이드에서만 사용)
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        // Dify 워크플로우 입력 변수 (워크플로우에서 정의한 입력 필드와 매칭)
-        inputs: {
-          transcript: transcript,
+    const response = await retryFetch(
+      () => fetch(`${apiUrl}/workflows/run`, {
+        method: 'POST',
+        headers: {
+          // Bearer 토큰 인증 (서버 사이드에서만 사용)
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-        // "blocking": 워크플로우 완료까지 동기적으로 대기 후 결과 반환
-        response_mode: 'blocking',
-        // 사용자 식별자 (Dify 대시보드에서 로그 추적용)
-        user: 'dx-member',
+        body: JSON.stringify({
+          // Dify 워크플로우 입력 변수 (워크플로우에서 정의한 입력 필드와 매칭)
+          inputs: {
+            transcript: transcript,
+          },
+          // "blocking": 워크플로우 완료까지 동기적으로 대기 후 결과 반환
+          response_mode: 'blocking',
+          // 사용자 식별자 (Dify 대시보드에서 로그 추적용)
+          user: 'dx-member',
+        }),
+        signal: controller.signal,
       }),
-      signal: controller.signal,
-    })
+      { maxRetries: 2, baseDelayMs: 2000 }
+    )
 
     // ── 타임아웃 타이머 해제 (정상 응답 수신 시) ──
     clearTimeout(timeoutId)

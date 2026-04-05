@@ -1,0 +1,24 @@
+services:
+  meeting-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: meeting-notes-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - meeting-backend
+
+  meeting-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: meeting-notes-node-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server/recordings:/app/server/recordings
+    env_file:
+      - .env

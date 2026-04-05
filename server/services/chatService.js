@@ -306,15 +306,20 @@ export async function chatWithSearch(question, history = []) {
         [searchQuery]
       )
     } catch (err) {
-      // FULLTEXT 인덱스 없거나 실패 시 LIKE 검색으로 폴백
+      // FULLTEXT 인덱스 없거나 실패 시 로그만 남김
       console.warn(`[챗봇] FULLTEXT 검색 실패, LIKE 검색으로 폴백: ${err.message}`)
-      const likePattern = `%${keywords[0]}%`
+    }
+
+    // FULLTEXT 결과가 없으면 LIKE 검색으로 폴백
+    if (!meetings || meetings.length === 0) {
+      const likeConditions = keywords.map(() => '(title LIKE ? OR ai_summary LIKE ? OR full_text LIKE ?)').join(' OR ')
+      const likeParams = keywords.flatMap(k => [`%${k}%`, `%${k}%`, `%${k}%`])
       meetings = await query(
         `SELECT id, title, date, ai_summary, key_decisions, transcript, full_text
          FROM meetings
-         WHERE title LIKE ? OR ai_summary LIKE ?
+         WHERE ${likeConditions}
          LIMIT 5`,
-        [likePattern, likePattern]
+        likeParams
       )
     }
   } else {

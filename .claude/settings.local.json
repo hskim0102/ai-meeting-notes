@@ -27,7 +27,17 @@
       "Bash(git log:*)",
       "Bash(node server/scripts/addSpeakerMap.js)",
       "Bash(git branch:*)",
-      "Bash(node -e \"import\\('chart.js'\\).then\\(\\(\\) => console.log\\('chart.js OK'\\)\\)\")"
+      "Bash(node -e \"import\\('chart.js'\\).then\\(\\(\\) => console.log\\('chart.js OK'\\)\\)\")",
+      "Bash(curl -s http://localhost:3000 2>&1 | head -5)",
+      "Bash(curl -s -X POST http://localhost:3001/api/chat/search \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"테스트 질문입니다\"}' 2>&1)",
+      "Bash(curl -s -X POST http://localhost:3001/api/chat/meeting/1 \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"이 회의 요약해줘\"}' 2>&1)",
+      "Bash(curl -s http://localhost:3001/api/meetings 2>&1)",
+      "Bash(curl -s -X POST http://localhost:3001/api/chat/search \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"회의 내용 알려줘\"}' 2>&1)",
+      "Bash(curl -s -X POST http://localhost:3001/api/chat/search \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"보안\"}' 2>&1)",
+      "Bash(node -e \"\nimport { extractKeywords } from './server/services/chatService.js';\nconsole.log\\('회의 내용 알려줘:', extractKeywords\\('회의 내용 알려줘'\\)\\);\nconsole.log\\('보안:', extractKeywords\\('보안'\\)\\);\nconsole.log\\('모바일 앱 출시 일정:', extractKeywords\\('모바일 앱 출시 일정'\\)\\);\nconsole.log\\('1분기 로드맵:', extractKeywords\\('1분기 로드맵'\\)\\);\n\")",
+      "Bash(node -e \"\nimport 'dotenv/config';\nimport { query } from './server/services/database.js';\n\n// FULLTEXT 검색 테스트\ntry {\n  const r1 = await query\\('SELECT id, title FROM meetings WHERE MATCH\\(title, ai_summary, full_text\\) AGAINST\\(? IN BOOLEAN MODE\\) LIMIT 5', ['보안']\\);\n  console.log\\('FULLTEXT 결과:', r1\\);\n} catch\\(e\\) {\n  console.log\\('FULLTEXT 에러:', e.message\\);\n}\n\n// LIKE 검색 테스트\ntry {\n  const r2 = await query\\('SELECT id, title FROM meetings WHERE title LIKE ? OR ai_summary LIKE ? LIMIT 5', ['%보안%', '%보안%']\\);\n  console.log\\('LIKE 결과:', r2\\);\n} catch\\(e\\) {\n  console.log\\('LIKE 에러:', e.message\\);\n}\n\n// 전체 회의 조회\nconst r3 = await query\\('SELECT id, title, ai_summary FROM meetings LIMIT 3'\\);\nconsole.log\\('전체 회의:', r3\\);\n\nprocess.exit\\(0\\);\n\")",
+      "Bash(sleep 2 && curl -s -X POST http://localhost:3001/api/chat/search \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"보안 이슈 대응은 어떻게 했나요?\"}' 2>&1)",
+      "Bash(curl -s -X POST http://localhost:3001/api/chat/search \\\\\n  -H 'Content-Type: application/json' \\\\\n  -d '{\"question\": \"모바일 앱 출시 일정 알려줘\"}' 2>&1)"
     ]
   }
 }

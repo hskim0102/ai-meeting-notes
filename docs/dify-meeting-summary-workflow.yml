@@ -1,0 +1,306 @@
+################################################################################
+# Dify Workflow - 회의록 AI 요약 (Enterprise Meeting Minutes)
+# ─────────────────────────────────────────────────────────────────────────────
+# 용도: STT로 전사된 회의 스크립트(transcript)를 입력받아 대기업 스타일의
+#       정식 회의록 + AI 요약 + 액션 아이템 + 키워드 등 구조화된 결과를 생성
+#
+# [출력 스키마 - server/services/difyService.js 의 parseWorkflowOutput 와 정합]
+# outputs.result (JSON 문자열) →
+#   {
+#     "summary":         "<대기업 스타일 정식 회의록 마크다운 본문>",
+#     "tldr":            "<3~5문장 핵심 요약>",
+#     "meeting_info": {
+#        "title":         "<회의 제목>",
+#        "purpose":       "<회의 목적>",
+#        "estimated_date":"<YYYY-MM-DD 또는 빈 문자열>",
+#        "estimated_time":"<HH:MM 또는 빈 문자열>",
+#        "duration_min":  <정수 분>,
+#        "location":      "<장소/플랫폼 또는 빈 문자열>",
+#        "attendees":     ["홍길동(개발팀)", ...],
+#        "agenda":        ["1. ...", "2. ..."]
+#     },
+#     "discussion_points": [
+#        { "topic": "...", "details": "...", "speakers": ["..."] }
+#     ],
+#     "key_decisions":   ["..."],
+#     "action_items": [
+#        { "text": "...", "assignee": "...", "dueDate": "YYYY-MM-DD" }
+#     ],
+#     "issues_risks":    ["..."],
+#     "next_steps":      ["..."],
+#     "next_meeting":    "<다음 회의 일정 또는 빈 문자열>",
+#     "keywords":        ["...", "..."],
+#     "sentiment":       "positive | neutral | negative"
+#   }
+#
+# [Dify 임포트 방법]
+# 1. Dify 대시보드 → Studio → "DSL 파일 가져오기"
+# 2. 본 YAML 업로드
+# 3. LLM 모델 확인 (gpt-4o / gpt-4o-mini 권장 - 긴 컨텍스트 + JSON 출력)
+# 4. "게시(Publish)" 후 API 키 복사 → .env 의 DIFY_API_KEY 에 설정
+# 5. .env 의 DIFY_API_URL 이 https://api.dify.ai/v1 형태인지 확인
+################################################################################
+
+app:
+  description: "회의 스크립트를 입력받아 대기업 스타일의 정식 회의록과 AI 요약, 액션 아이템, 핵심 키워드 등을 구조화하여 생성하는 워크플로우"
+  icon: 📝
+  icon_background: "#FEF3C7"
+  mode: workflow
+  name: 회의록 AI 요약 (Enterprise)
+  use_icon_as_answer_icon: false
+
+kind: app
+version: 0.1.5
+
+workflow:
+  conversation_variables: []
+
+  environment_variables: []
+
+  features:
+    file_upload:
+      image:
+        enabled: false
+    opening_statement: ""
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    suggested_questions: []
+    text_to_speech:
+      enabled: false
+
+  graph:
+    edges:
+      - data:
+          sourceType: start
+          targetType: llm
+        id: start-to-llm
+        source: start
+        target: llm-node
+        type: custom
+
+      - data:
+          sourceType: llm
+          targetType: end
+        id: llm-to-end
+        source: llm-node
+        target: end-node
+        type: custom
+
+    nodes:
+      ##########################################################################
+      # 시작 노드 - 입력 변수 정의
+      # server/services/difyService.js 가 inputs: { transcript } 로 호출
+      ##########################################################################
+      - data:
+          title: 시작
+          type: start
+          variables:
+            - label: transcript
+              max_length: 200000
+              options: []
+              required: true
+              type: paragraph
+              variable: transcript
+        height: 90
+        id: start
+        position:
+          x: 80
+          y: 282
+        type: custom
+        width: 244
+
+      ##########################################################################
+      # LLM 노드 - 회의록 생성 + 구조화 요약
+      # 한 번의 LLM 호출로 대기업 회의록 본문 + 메타데이터 + 액션아이템을 생성
+      ##########################################################################
+      - data:
+          title: 회의록 생성
+          type: llm
+          model:
+            completion_params:
+              temperature: 0.2
+              top_p: 0.9
+              max_tokens: 4096
+              frequency_penalty: 0.0
+              presence_penalty: 0.0
+              response_format: json_object
+            mode: chat
+            name: gpt-4o-mini
+            provider: openai
+          prompt_template:
+            - id: system-prompt
+              role: system
+              text: |
+                당신은 대기업 사내 회의록을 전문적으로 작성하는 AI 회의록 작성 비서입니다.
+                STT(음성→텍스트)로 전사된 회의 스크립트를 입력받아, 대기업의 공식 회의록 양식에
+                준하는 정제된 회의록과 함께 구조화된 메타데이터를 생성해야 합니다.
+
+                ## 작업 원칙
+
+                1. **사실 기반(Fact-based)**: 스크립트에 등장하지 않은 내용은 절대 추측하거나
+                   지어내지 마세요. 정보가 없으면 빈 문자열("") 또는 빈 배열([]) 을 사용하세요.
+                2. **한국어 비즈니스 톤**: 정중하고 객관적인 비즈니스 문체로 작성하세요.
+                   ("~함", "~할 예정임", "~로 결정됨" 등의 개조식 또는 격식체)
+                3. **개조식 정리**: 회의록 본문은 가독성을 위해 개조식(불릿/번호 리스트)으로 정리하세요.
+                4. **화자 인용**: 발화자가 명확히 식별되는 경우 "OOO님", "OOO 책임" 등으로 인용하세요.
+                5. **시간 추정**: 스크립트 길이/내용으로 회의 시간(분)을 추정할 수 있으면 추정값을,
+                   불확실하면 0 을 반환하세요.
+                6. **액션 아이템**: "~하기로 함", "~까지 ~함", "OOO이 ~함" 등 실행 항목을 빠짐없이 추출하세요.
+                   - text: 수행할 작업 내용 (간결한 한 문장)
+                   - assignee: 담당자 (없으면 "")
+                   - dueDate: YYYY-MM-DD (없으면 "")
+                7. **민감정보 보호**: 개인정보(주민번호, 연락처 등)는 마스킹하세요.
+
+                ## 출력 형식 (반드시 아래 JSON 스키마를 그대로 따를 것)
+
+                반드시 **유효한 JSON 객체 1개**만 출력하세요. 마크다운 코드 펜스를 쓰지 말고,
+                JSON 앞뒤에 어떠한 설명 텍스트도 붙이지 마세요.
+
+                {
+                  "summary": "<아래 [회의록 본문 템플릿] 을 그대로 채운 마크다운 문자열>",
+                  "tldr": "<3~5문장으로 회의의 핵심을 요약한 한국어 문단>",
+                  "meeting_info": {
+                    "title": "<회의의 핵심 주제를 드러내는 짧은 제목>",
+                    "purpose": "<회의 개최 목적 한 문장>",
+                    "estimated_date": "",
+                    "estimated_time": "",
+                    "duration_min": 0,
+                    "location": "",
+                    "attendees": ["<참석자1(소속/직책)>", "<참석자2(소속/직책)>"],
+                    "agenda": ["1. <안건1>", "2. <안건2>"]
+                  },
+                  "discussion_points": [
+                    {
+                      "topic": "<논의 주제>",
+                      "details": "<논의 내용 요약 (2~4문장)>",
+                      "speakers": ["<관련 발화자>"]
+                    }
+                  ],
+                  "key_decisions": [
+                    "<주요 결정 사항 1>",
+                    "<주요 결정 사항 2>"
+                  ],
+                  "action_items": [
+                    {
+                      "text": "<수행할 작업>",
+                      "assignee": "<담당자 또는 빈 문자열>",
+                      "dueDate": "<YYYY-MM-DD 또는 빈 문자열>"
+                    }
+                  ],
+                  "issues_risks": [
+                    "<제기된 이슈/리스크 1>"
+                  ],
+                  "next_steps": [
+                    "<다음 단계 1>"
+                  ],
+                  "next_meeting": "",
+                  "keywords": ["<키워드1>", "<키워드2>", "<키워드3>"],
+                  "sentiment": "neutral"
+                }
+
+                ## [회의록 본문 템플릿] - summary 필드에 들어갈 마크다운 형식
+
+                아래 형식을 그대로 따르되, 정보가 없는 항목은 "(해당 없음)" 으로 표기하세요.
+                줄바꿈은 반드시 \n 이스케이프로 처리하여 JSON 문자열을 유효하게 유지하세요.
+
+                # 📋 회의록
+
+                ## 1. 회의 개요
+                - **회의명**: <회의 제목>
+                - **일시**: <추정 일자/시간> (소요시간 약 <duration_min>분)
+                - **장소**: <장소 또는 (해당 없음)>
+                - **참석자**: <참석자 콤마 구분>
+                - **작성자**: AI 회의록 비서
+                - **목적**: <회의 목적>
+
+                ## 2. 회의 안건
+                1. <안건1>
+                2. <안건2>
+
+                ## 3. 주요 논의 내용
+
+                ### 3.1 <논의 주제 1>
+                - <세부 논의 내용 1>
+                - <세부 논의 내용 2>
+                - 발언: OOO님 — "<핵심 발언 인용>"
+
+                ### 3.2 <논의 주제 2>
+                - <세부 논의 내용>
+
+                ## 4. 결정 사항
+                1. <결정 사항 1>
+                2. <결정 사항 2>
+
+                ## 5. 액션 아이템
+                | No. | 담당자 | 수행 과제 | 마감일 |
+                |-----|--------|-----------|--------|
+                | 1 | <담당자> | <과제 내용> | <YYYY-MM-DD> |
+
+                ## 6. 이슈 및 리스크
+                - <이슈 1>
+
+                ## 7. 향후 계획 (Next Steps)
+                - <다음 단계 1>
+                - **다음 회의**: <일정 또는 (미정)>
+
+                ---
+                *본 회의록은 AI 가 자동 생성한 초안입니다. 사실 확인 후 사용하시기 바랍니다.*
+
+                ## 마지막 체크리스트 (출력 직전 반드시 점검)
+
+                - 출력은 JSON 객체 1개뿐인가? (코드 펜스/설명문 없음)
+                - summary 필드는 위 회의록 템플릿을 따르는 마크다운 문자열인가?
+                - action_items 의 각 원소가 text/assignee/dueDate 키를 모두 가지는가?
+                - keywords 는 5~10개의 명사구 배열인가?
+                - sentiment 는 positive/neutral/negative 중 하나인가?
+                - 스크립트에 없는 내용을 지어내지 않았는가?
+
+            - id: user-prompt
+              role: user
+              text: |
+                다음은 STT 로 전사된 회의 스크립트입니다. 이 내용을 바탕으로 위에서 정의한
+                JSON 스키마에 맞춰 대기업 스타일 회의록과 구조화 요약을 생성하세요.
+
+                ===== 회의 스크립트 시작 =====
+                {{#start.transcript#}}
+                ===== 회의 스크립트 끝 =====
+
+          memory:
+            enabled: false
+            window:
+              enabled: false
+              size: 10
+          vision:
+            enabled: false
+          context:
+            enabled: false
+        height: 98
+        id: llm-node
+        position:
+          x: 380
+          y: 282
+        type: custom
+        width: 244
+
+      ##########################################################################
+      # 종료 노드 - result(JSON 문자열) 출력
+      # server/services/difyService.js 의 parseWorkflowOutput 가
+      # outputs.result 를 JSON.parse 하여 구조화 결과를 생성
+      ##########################################################################
+      - data:
+          title: 종료
+          type: end
+          outputs:
+            - value_selector:
+                - llm-node
+                - text
+              variable: result
+        height: 90
+        id: end-node
+        position:
+          x: 680
+          y: 282
+        type: custom
+        width: 244

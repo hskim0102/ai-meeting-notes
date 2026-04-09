@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { marked } from 'marked'
 import { useDarkMode } from '../composables/useDarkMode.js'
+import { exportMeetingToWord } from '../utils/wordExport.js'
 import ActionItemRow from '../components/ActionItemRow.vue'
 import SkeletonLoader from '../components/SkeletonLoader.vue'
 import MeetingChatbot from '../components/MeetingChatbot.vue'
@@ -84,6 +86,21 @@ const speakerColors = computed(() => {
 })
 
 const hasTranscript = computed(() => meeting.value?.transcript?.length > 0)
+
+// ── AI 요약 마크다운 렌더링 ──
+// Dify 워크플로우가 생성한 대기업 스타일 회의록(마크다운) 을 HTML 로 변환
+// marked 기본 설정: GFM 활성화, 개행을 <br> 로 변환
+marked.setOptions({ gfm: true, breaks: true })
+const aiSummaryHtml = computed(() => {
+  const raw = meeting.value?.aiSummary || ''
+  if (!raw.trim()) return ''
+  try {
+    return marked.parse(raw)
+  } catch (e) {
+    console.warn('[MeetingDetail] 마크다운 파싱 실패:', e)
+    return raw
+  }
+})
 
 // ── 화자 이름 매핑 (SPEAKER_00 → 실제 이름) ──
 const speakerMap = ref({})
@@ -249,6 +266,20 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.value.show = false }, 3000)
 }
 
+// ── Word(.doc) 다운로드 ──
+// 회의 데이터(메타 + AI 요약 마크다운 + 결정사항 + 액션아이템) 를 Word 호환
+// HTML 로 변환하여 파일 다운로드 트리거
+function downloadWord() {
+  if (!meeting.value) return
+  try {
+    exportMeetingToWord(meeting.value)
+    showToast('Word 문서를 다운로드했습니다.', 'success')
+  } catch (err) {
+    console.error('[Word 다운로드 오류]', err)
+    showToast(`다운로드 실패: ${err.message}`, 'error')
+  }
+}
+
 const formatDuration = (min) => {
   if (!min) return ''
   if (min >= 60) return `${Math.floor(min / 60)}시간 ${min % 60}분`
@@ -400,13 +431,70 @@ const sentimentColor = computed(() => {
           취소
         </button>
       </template>
+      <!-- Word 다운로드 -->
+      <button
+        @click="downloadWord"
+        class="ml-auto px-4 py-2 text-sm font-medium border rounded-lg transition-colors flex items-center gap-2"
+        :class="isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
+        title="회의록을 MS Word(.doc) 파일로 다운로드"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l1.5 4 1.5-4m3 0l1.5 4 1.5-4" />
+        </svg>
+        Word 다운로드
+      </button>
+
+      <!-- 메일 발송 -->
       <button
         @click="openEmailModal"
-        class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-600 ml-auto"
+        class="px-4 py-2 text-sm font-medium border rounded-lg transition-colors flex items-center gap-2"
+        :class="isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'"
       >
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
         메일 발송
       </button>
+    </div>
+
+    <!-- ===== 회의록 문서 (AI 요약) - 풀폭 문서 스타일 ===== -->
+    <!-- Dify 가 생성한 대기업 스타일 회의록 마크다운을 A4 문서처럼 크게 표시 -->
+    <div v-if="meeting.aiSummary" class="mb-8">
+      <div class="flex items-center gap-2 mb-3">
+        <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+        </svg>
+        <h2 class="text-lg font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">AI 회의록</h2>
+        <span class="text-xs px-2 py-0.5 rounded-full" :class="isDark ? 'bg-accent-900/30 text-accent-300' : 'bg-accent-50 text-accent-600'">
+          AI 자동 생성
+        </span>
+      </div>
+
+      <!-- 뷰 모드: A4 문서 느낌의 카드 -->
+      <article
+        v-if="!isEditing"
+        class="meeting-minutes-doc rounded-xl border shadow-sm px-8 py-10 md:px-14 md:py-12 mx-auto max-w-4xl"
+        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+      >
+        <div
+          v-if="aiSummaryHtml"
+          class="minutes-content"
+          :class="isDark ? 'minutes-dark' : 'minutes-light'"
+          v-html="aiSummaryHtml"
+        ></div>
+        <p v-else class="text-sm text-center py-8" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+          AI 요약이 아직 생성되지 않았습니다.
+        </p>
+      </article>
+
+      <!-- 편집 모드: 큰 textarea (마크다운 직접 편집) -->
+      <textarea
+        v-else
+        v-model="editData.aiSummary"
+        rows="20"
+        placeholder="마크다운 형식으로 회의록을 작성하세요..."
+        class="w-full font-mono text-sm leading-relaxed border rounded-xl p-6 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y max-w-4xl mx-auto block"
+        :class="isDark ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-white border-slate-200 text-slate-700'"
+      ></textarea>
     </div>
 
     <!-- 2-Column Layout -->
@@ -425,26 +513,6 @@ const sentimentColor = computed(() => {
       <!-- ===== Right Column: AI Summary Panel (40%, or full width if no transcript) ===== -->
       <div :class="hasTranscript ? 'w-full lg:w-[40%]' : 'w-full'">
         <div class="lg:sticky lg:top-6 space-y-6">
-
-          <!-- AI 요약 -->
-          <div class="rounded-xl border p-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
-            <div class="flex items-center gap-2 mb-4">
-              <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
-              <h3 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">AI 요약</h3>
-            </div>
-            <!-- 뷰 모드 -->
-            <p v-if="!isEditing" class="text-sm leading-relaxed" :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ meeting.aiSummary }}</p>
-            <!-- 편집 모드 -->
-            <textarea
-              v-else
-              v-model="editData.aiSummary"
-              rows="5"
-              class="w-full text-sm leading-relaxed border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y"
-              :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-200 text-slate-600'"
-            ></textarea>
-          </div>
 
           <!-- 주요 결정 사항 -->
           <div class="rounded-xl border p-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
@@ -752,4 +820,173 @@ const sentimentColor = computed(() => {
 .toast-leave-active { animation: toast-out 0.3s ease-in; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-12px); } }
+
+/* ─────────────────────────────────────────────────────────────
+   회의록 문서(마크다운 렌더링) 스타일
+   A4 문서처럼 가독성 높은 타이포그래피 + 계층 구조 시각화
+   ───────────────────────────────────────────────────────────── */
+.meeting-minutes-doc {
+  /* 문서 느낌의 미묘한 그림자 */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+}
+
+.minutes-content {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  word-break: keep-all;
+}
+
+/* ── 헤딩 ── */
+.minutes-content :deep(h1) {
+  font-size: 1.875rem;   /* 30px */
+  font-weight: 800;
+  line-height: 1.3;
+  margin: 0 0 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid;
+  letter-spacing: -0.02em;
+}
+.minutes-light :deep(h1) { color: #0f172a; border-color: #e2e8f0; }
+.minutes-dark :deep(h1)  { color: #f1f5f9; border-color: #334155; }
+
+.minutes-content :deep(h2) {
+  font-size: 1.375rem;   /* 22px */
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 2rem 0 0.875rem;
+  padding-left: 0.75rem;
+  border-left: 4px solid #f59e0b; /* accent-500 느낌 */
+}
+.minutes-light :deep(h2) { color: #1e293b; }
+.minutes-dark :deep(h2)  { color: #f8fafc; }
+
+.minutes-content :deep(h3) {
+  font-size: 1.125rem;   /* 18px */
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 1.5rem 0 0.5rem;
+}
+.minutes-light :deep(h3) { color: #334155; }
+.minutes-dark :deep(h3)  { color: #e2e8f0; }
+
+.minutes-content :deep(h4),
+.minutes-content :deep(h5),
+.minutes-content :deep(h6) {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.minutes-light :deep(h4) { color: #475569; }
+.minutes-dark :deep(h4)  { color: #cbd5e1; }
+
+/* ── 단락 ── */
+.minutes-content :deep(p) {
+  margin: 0.75rem 0;
+}
+.minutes-light :deep(p) { color: #334155; }
+.minutes-dark :deep(p)  { color: #cbd5e1; }
+
+/* ── 강조 ── */
+.minutes-content :deep(strong) { font-weight: 700; }
+.minutes-light :deep(strong) { color: #0f172a; }
+.minutes-dark :deep(strong)  { color: #f1f5f9; }
+
+/* ── 리스트 ── */
+.minutes-content :deep(ul),
+.minutes-content :deep(ol) {
+  margin: 0.5rem 0 1rem;
+  padding-left: 1.5rem;
+}
+.minutes-content :deep(ul) { list-style: disc; }
+.minutes-content :deep(ol) { list-style: decimal; }
+.minutes-content :deep(li) {
+  margin: 0.35rem 0;
+  padding-left: 0.25rem;
+}
+.minutes-light :deep(li) { color: #334155; }
+.minutes-dark :deep(li)  { color: #cbd5e1; }
+.minutes-content :deep(li::marker) { color: #f59e0b; font-weight: 600; }
+
+/* 중첩 리스트 */
+.minutes-content :deep(li > ul),
+.minutes-content :deep(li > ol) { margin: 0.25rem 0; }
+
+/* ── 테이블 (액션 아이템 표 등) ── */
+.minutes-content :deep(table) {
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  border-collapse: collapse;
+  font-size: 14px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.minutes-light :deep(table) { border: 1px solid #e2e8f0; }
+.minutes-dark :deep(table)  { border: 1px solid #334155; }
+
+.minutes-content :deep(thead) { font-weight: 600; }
+.minutes-light :deep(thead) { background: #f8fafc; }
+.minutes-dark :deep(thead)  { background: #1e293b; }
+
+.minutes-content :deep(th),
+.minutes-content :deep(td) {
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+}
+.minutes-light :deep(th) { color: #0f172a; border-bottom: 1px solid #e2e8f0; }
+.minutes-dark :deep(th)  { color: #f1f5f9; border-bottom: 1px solid #334155; }
+.minutes-light :deep(td) { color: #334155; border-top: 1px solid #e2e8f0; }
+.minutes-dark :deep(td)  { color: #cbd5e1; border-top: 1px solid #334155; }
+
+.minutes-light :deep(tbody tr:nth-child(even)) { background: #fafafa; }
+.minutes-dark :deep(tbody tr:nth-child(even))  { background: rgba(30, 41, 59, 0.4); }
+
+/* ── 구분선 ── */
+.minutes-content :deep(hr) {
+  border: none;
+  margin: 2rem 0;
+  height: 1px;
+}
+.minutes-light :deep(hr) { background: #e2e8f0; }
+.minutes-dark :deep(hr)  { background: #334155; }
+
+/* ── 인용 ── */
+.minutes-content :deep(blockquote) {
+  margin: 1rem 0;
+  padding: 0.75rem 1.25rem;
+  border-left: 4px solid;
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+}
+.minutes-light :deep(blockquote) { background: #fffbeb; border-color: #f59e0b; color: #78350f; }
+.minutes-dark :deep(blockquote)  { background: rgba(245, 158, 11, 0.1); border-color: #f59e0b; color: #fcd34d; }
+
+/* ── 인라인 코드 ── */
+.minutes-content :deep(code) {
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 0.875em;
+}
+.minutes-light :deep(code) { background: #f1f5f9; color: #db2777; }
+.minutes-dark :deep(code)  { background: #1e293b; color: #f472b6; }
+
+/* 코드 블록 */
+.minutes-content :deep(pre) {
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.minutes-light :deep(pre) { background: #0f172a; color: #e2e8f0; }
+.minutes-dark :deep(pre)  { background: #020617; color: #e2e8f0; }
+.minutes-content :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+/* 마지막 요소 하단 여백 제거 */
+.minutes-content :deep(> *:last-child) { margin-bottom: 0; }
+.minutes-content :deep(> *:first-child) { margin-top: 0; }
 </style>

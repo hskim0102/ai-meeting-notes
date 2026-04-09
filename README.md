@@ -1,82 +1,217 @@
-# AI 스마트 회의록 (AI Smart Meeting Notes)
+# AI 스마트 회의록
 
-브라우저에서 회의를 녹음하거나 오디오 파일을 업로드하면, OpenAI Whisper API를 통해 자동으로 텍스트로 변환하고 타임라인 기반 회의록을 생성하는 풀스택 웹 애플리케이션입니다.
+회의 녹음/업로드부터 AI 음성인식, 화자 분리, AI 요약, 액션 아이템 추출, 챗봇 Q&A까지 — 회의의 모든 것을 자동화하는 풀스택 웹 애플리케이션입니다.
+
+---
 
 ## 주요 기능
 
-- **실시간 녹음** — 브라우저 마이크(MediaRecorder API)로 회의를 직접 녹음 (audio/webm)
-- **파일 업로드** — 기존 오디오 파일(webm, mp3, wav, m4a, ogg, flac) 드래그 앤 드롭 업로드
-- **대용량 파일 자동 분할** — 25MB 초과 파일은 ffmpeg로 20MB 단위 분할 후 순차 처리
-- **AI 음성 인식(STT)** — OpenAI Whisper API를 통한 한국어 음성-텍스트 변환
-- **타임스탬프 병합** — 분할된 전사 결과를 시간 오프셋 기반으로 하나의 완벽한 트랜스크립트로 병합
-- **대시보드** — 회의 통계, 최근 회의, 예정 회의, 액션 아이템 현황 한눈에 확인
-- **회의 상세 뷰** — AI 요약, 주요 결정사항, 액션 아이템(체크박스), 회의록 탭
-- **액션 아이템 관리** — 전체 회의의 액션 아이템 통합 관리, 진행률 추적
+| 기능 | 설명 |
+|------|------|
+| **음성 녹음 & 업로드** | 브라우저 마이크 녹음(WebM) 또는 오디오 파일 드래그앤드롭 업로드 |
+| **AI 음성 인식 (STT)** | OpenAI Whisper API로 음성을 텍스트로 변환, 25MB 초과 시 자동 청크 분할 |
+| **화자 분리** | Pyannote 기반 화자 분리(Diarization) + 화자 이름 매핑 |
+| **AI 요약** | Dify Workflow API를 통한 회의 요약, 핵심 결정사항, 감정 분석 |
+| **액션 아이템** | 회의에서 추출된 액션 아이템 관리 (담당자, 마감일, 완료 토글) |
+| **AI 챗봇** | 회의 내용 기반 Q&A 챗봇 (단일 회의 / 전체 회의 검색) |
+| **회의실 예약** | 회의실 목록, 가용성 조회, 캘린더 기반 예약 관리 |
+| **통합 검색** | 제목, 요약, 전문 텍스트 FULLTEXT 검색 + 자동완성 |
+| **대시보드 & 차트** | 회의 통계, 트렌드 차트 (Chart.js) |
+| **회의록 메일 발송** | Nodemailer를 통한 회의록 이메일 전송 |
+| **녹음 보관** | 녹음 파일 서버 저장, 목록 관리, 오디오 스트리밍 |
+| **다크 모드** | 시스템 설정 연동 다크/라이트 모드 |
+| **모바일 반응형** | 모바일 하단 네비게이션, 반응형 레이아웃 |
+| **커맨드 팔레트** | 빠른 페이지 이동 & 검색 (Ctrl+K) |
+| **로그인 & 권한** | localStorage 기반 인증, 관리자 전용 감사 로그 |
+
+---
 
 ## 기술 스택
 
-| 영역 | 기술 |
-|------|------|
-| **프론트엔드** | Vue.js 3 (Composition API), Vite 8, Tailwind CSS v4, Vue Router 4 |
-| **백엔드** | Express.js 5, Multer (파일 업로드), fluent-ffmpeg (오디오 분할) |
-| **AI** | OpenAI Whisper API (STT) |
-| **오디오** | MediaRecorder API (브라우저 녹음), ffmpeg (서버 분할) |
+### Frontend
+- **Vue.js 3** — Composition API, `<script setup>`
+- **Vite 8** — 빌드 도구, 프록시(`/api` → `:3001`)
+- **Tailwind CSS v4** — 유틸리티 기반 스타일링
+- **Vue Router 4** — SPA 라우팅 + 네비게이션 가드
+- **Chart.js + vue-chartjs** — 대시보드 차트
+- **@vueuse/motion** — 페이지 트랜지션 애니메이션
+
+### Backend
+- **Express.js 5** — ESM 모듈 기반 REST API 서버
+- **MySQL 8** — mysql2/promise 커넥션 풀
+- **Multer** — 파일 업로드 (최대 500MB)
+- **fluent-ffmpeg** — 오디오 청크 분할 (20MB 단위)
+- **Nodemailer** — 이메일 발송
+- **Zod** — 요청 데이터 유효성 검증
+
+### AI / 외부 서비스
+- **OpenAI Whisper API** — 음성 → 텍스트 변환 (STT)
+- **Dify Workflow API** — 회의 요약, 액션 아이템 추출, 감정 분석
+- **Pyannote** — 화자 분리 (Diarization) 서비스
+
+### 테스트
+- **Vitest** — 단위 테스트
+- **Playwright** — E2E 테스트
+- **Supertest** — API 통합 테스트
+
+---
 
 ## 프로젝트 구조
 
 ```
-src/                              # Vue.js 프론트엔드
-├── main.js                       # 앱 진입점, 라우터 설정
-├── style.css                     # Tailwind CSS + 커스텀 테마 색상
-├── App.vue                       # 루트 레이아웃 (사이드바 + router-view)
-├── components/
-│   ├── SidebarNav.vue            # 좌측 네비게이션 사이드바
-│   ├── StatCard.vue              # 대시보드 통계 카드
-│   ├── MeetingCard.vue           # 회의 목록 카드
-│   ├── ActionItemRow.vue         # 액션 아이템 행 (체크박스)
-│   ├── AudioUploader.vue         # 드래그 앤 드롭 오디오 업로드
-│   └── LiveRecorder.vue          # 실시간 마이크 녹음 컴포넌트
-├── views/
-│   ├── DashboardView.vue         # 메인 대시보드
-│   ├── MeetingsListView.vue      # 회의 목록 (검색/필터)
-│   ├── MeetingDetailView.vue     # 회의 상세 (AI 요약, 액션, 회의록 탭)
-│   ├── ActionItemsView.vue       # 전체 액션 아이템 관리
-│   └── NewMeetingView.vue        # 실시간 녹음 / 파일 업로드 → STT 결과
-├── services/
-│   └── api.js                    # 백엔드 API 클라이언트 (XHR + 진행률)
-└── data/
-    └── mockData.js               # 목업 데이터 (한국어)
-
-server/                           # Express.js 백엔드
-├── index.js                      # 서버 진입점 (포트 3001, CORS)
-├── routes/
-│   └── transcribe.js             # POST /api/transcribe (업로드 → 분할 → STT → 응답 → 정리)
-├── services/
-│   ├── audioSplitter.js          # ffmpeg 기반 오디오 분할 (20MB 단위)
-│   └── whisperService.js         # Whisper API 호출 + 타임스탬프 병합
-├── uploads/                      # 업로드 임시 저장 (자동 삭제)
-└── temp/                         # 분할 청크 임시 저장 (자동 삭제)
+ai-meeting-notes/
+├── src/                            # Vue.js 프론트엔드
+│   ├── main.js                     # 앱 진입점, 라우터 설정
+│   ├── style.css                   # Tailwind + 커스텀 테마
+│   ├── App.vue                     # 루트 레이아웃 (사이드바 + 라우터뷰)
+│   ├── components/
+│   │   ├── SidebarNav.vue          # 좌측 사이드바 네비게이션
+│   │   ├── MobileBottomNav.vue     # 모바일 하단 네비게이션
+│   │   ├── CommandPalette.vue      # 커맨드 팔레트 (Ctrl+K)
+│   │   ├── ToastNotification.vue   # 전역 토스트 알림
+│   │   ├── AudioUploader.vue       # 드래그앤드롭 오디오 업로드
+│   │   ├── LiveRecorder.vue        # 브라우저 마이크 녹음 (MediaRecorder)
+│   │   ├── MeetingCard.vue         # 회의 목록 카드
+│   │   ├── MeetingChatbot.vue      # AI 챗봇 컴포넌트
+│   │   ├── StatCard.vue            # 대시보드 통계 카드
+│   │   ├── ActionItemRow.vue       # 액션 아이템 행 (체크박스)
+│   │   ├── SpeakerTimeline.vue     # 화자 타임라인
+│   │   ├── AutoAgenda.vue          # 자동 아젠다
+│   │   ├── CollaborationIndicator.vue
+│   │   ├── NotificationPanel.vue   # 알림 패널
+│   │   ├── SkeletonLoader.vue      # 로딩 스켈레톤
+│   │   ├── EmptyState.vue          # 빈 상태 표시
+│   │   └── charts/                 # 차트 컴포넌트
+│   │       ├── BarChart.vue
+│   │       ├── DoughnutChart.vue
+│   │       └── LineChart.vue
+│   ├── views/
+│   │   ├── LoginView.vue           # 로그인 페이지
+│   │   ├── DashboardView.vue       # 대시보드 (통계, 차트)
+│   │   ├── NewMeetingView.vue      # 새 회의 (녹음/업로드 → STT → AI 요약)
+│   │   ├── MeetingsListView.vue    # 회의 목록 (필터, 정렬)
+│   │   ├── MeetingDetailView.vue   # 회의 상세 (요약, 액션, 전사 탭)
+│   │   ├── MeetingAnalysisView.vue # 회의 분석
+│   │   ├── ActionItemsView.vue     # 전체 액션 아이템 관리
+│   │   ├── SearchView.vue          # 통합 검색
+│   │   ├── ChatView.vue            # AI 챗봇 페이지
+│   │   ├── RecordingsListView.vue  # 녹음 보관 목록
+│   │   ├── RoomListView.vue        # 회의실 목록
+│   │   ├── RoomCalendarView.vue    # 회의실 캘린더 예약
+│   │   ├── ReportView.vue          # 리포트
+│   │   ├── SettingsView.vue        # 설정
+│   │   └── AuditLogView.vue        # 감사 로그 (관리자)
+│   ├── composables/
+│   │   ├── useAuth.js              # 인증 상태 관리
+│   │   ├── useDarkMode.js          # 다크 모드 토글
+│   │   ├── useSidebar.js           # 사이드바 접기/펼치기
+│   │   └── useNotifications.js     # 알림 상태 관리
+│   ├── services/
+│   │   └── api.js                  # API 클라이언트 (모든 백엔드 통신)
+│   └── data/
+│       └── mockData.js             # 목 데이터 (한국어)
+│
+├── server/                         # Express.js 백엔드
+│   ├── index.js                    # 서버 진입점 (포트 3001)
+│   ├── routes/
+│   │   ├── transcribe.js           # POST /api/transcribe — STT
+│   │   ├── summarize.js            # POST /api/summarize — AI 요약
+│   │   ├── meetings.js             # /api/meetings — 회의 CRUD
+│   │   ├── rooms.js                # /api/rooms — 회의실 & 예약
+│   │   ├── search.js               # /api/search — 통합 검색
+│   │   ├── recordings.js           # /api/recordings — 녹음 보관
+│   │   └── chat.js                 # /api/chat — AI 챗봇
+│   ├── services/
+│   │   ├── database.js             # MySQL 커넥션 풀 (mysql2/promise)
+│   │   ├── whisperService.js       # Whisper API STT + 트랜스크립트 병합
+│   │   ├── difyService.js          # Dify Workflow API 호출
+│   │   ├── chatService.js          # 챗봇 서비스 (Dify)
+│   │   ├── audioSplitter.js        # ffmpeg 오디오 청크 분할
+│   │   ├── diarizationMerger.js    # 화자 분리 결과 병합
+│   │   ├── retryFetch.js           # HTTP 재시도 유틸
+│   │   └── validators.js           # Zod 스키마 검증
+│   ├── scripts/
+│   │   ├── initDb.js               # DB 초기화 (테이블 + 시드 데이터)
+│   │   └── addSpeakerMap.js        # DB 마이그레이션
+│   ├── uploads/                    # 업로드 임시 저장 (자동 정리)
+│   ├── temp/                       # 분할 청크 임시 저장 (자동 정리)
+│   └── recordings/                 # 녹음 파일 영구 저장
+│
+├── tests/                          # 테스트
+│   └── e2e/                        # Playwright E2E 테스트
+├── docs/                           # 문서
+│   └── dify-chatbot-workflow.yml   # Dify 챗봇 워크플로우 설정
+├── vite.config.js                  # Vite 설정 (프록시, Tailwind)
+└── package.json                    # 의존성 & 스크립트
 ```
+
+---
 
 ## 시작하기
 
 ### 사전 요구사항
 
-- **Node.js** 18 이상
+- **Node.js** 18+
+- **MySQL 8** (포트 30306 기본)
 - **ffmpeg** 설치 (`brew install ffmpeg`)
-- **OpenAI API 키**
+- **OpenAI API Key** (Whisper STT)
+- **Dify API Key & URL** (AI 요약)
 
-### 설치 및 실행
+### 1. 프로젝트 클론 & 의존성 설치
 
 ```bash
-# 1. 의존성 설치
+git clone <repository-url>
+cd ai-meeting-notes
 npm install --legacy-peer-deps
+```
 
-# 2. 환경 변수 설정
-cp .env.example .env
-# .env 파일을 열어 OPENAI_API_KEY 값을 입력
+> `--legacy-peer-deps`는 Vite 8과 Tailwind의 peer dependency 충돌 해결에 필요합니다.
 
-# 3. 프론트엔드 + 백엔드 동시 실행
+### 2. 환경 변수 설정
+
+프로젝트 루트에 `.env` 파일을 생성합니다:
+
+```env
+# OpenAI (Whisper STT)
+OPENAI_API_KEY=sk-xxxxx
+
+# Dify (AI 요약 & 챗봇)
+DIFY_API_KEY=app-xxxxx
+DIFY_API_URL=https://your-dify-instance/v1
+DIFY_CHATBOT_API_KEY=app-xxxxx    # 챗봇 전용 (선택)
+
+# MySQL
+DB_HOST=127.0.0.1
+DB_PORT=30306
+DB_USER=root
+DB_PASSWORD=root
+DB_NAME=meetings
+
+# 화자 분리 서비스 (선택)
+DIARIZE_SERVICE_URL=http://localhost:5000
+
+# 이메일 발송 (선택)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+
+# 서버
+SERVER_PORT=3001
+```
+
+### 3. 데이터베이스 초기화
+
+```bash
+npm run db:init
+```
+
+`meetings`, `rooms`, `reservations`, `recordings` 테이블이 생성되고 샘플 데이터가 삽입됩니다.
+
+### 4. 서버 실행
+
+```bash
+# 프론트엔드 + 백엔드 동시 실행
 npm run dev:all
 ```
 
@@ -85,67 +220,204 @@ npm run dev:all
 | 프론트엔드 | http://localhost:3000 | `npm run dev` |
 | 백엔드 API | http://localhost:3001 | `npm run dev:server` |
 
-### 스크립트
-
-```bash
-npm run dev          # 프론트엔드 개발 서버 (포트 3000)
-npm run dev:server   # 백엔드 서버 (포트 3001)
-npm run dev:all      # 프론트엔드 + 백엔드 동시 실행
-npm run build        # 프론트엔드 프로덕션 빌드
-```
-
-## 페이지 안내
-
-| 경로 | 페이지 | 설명 |
-|------|--------|------|
-| `/` | 대시보드 | 통계 카드, 최근/예정 회의, 진행 중 회의 배너, 미완료 액션 아이템 |
-| `/meetings/new` | 새 회의록 | 실시간 녹음 또는 파일 업로드 → AI STT → 타임라인 결과 |
-| `/meetings` | 회의 목록 | 제목/태그 검색, 상태 필터링 |
-| `/meetings/:id` | 회의 상세 | AI 요약, 주요 결정사항, 액션 아이템, 회의록 탭 |
-| `/action-items` | 액션 아이템 | 전체 회의 액션 아이템 통합 관리, 진행률 바 |
+---
 
 ## API 엔드포인트
 
-### `POST /api/transcribe`
+### 음성 인식 (STT)
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `POST` | `/api/transcribe` | 오디오 파일 업로드 → STT 변환 |
+| `GET` | `/api/transcribe/health` | STT 서비스 상태 확인 |
 
-오디오 파일을 업로드하여 STT 처리합니다.
+### AI 요약
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `POST` | `/api/summarize` | 전사 텍스트 → AI 요약 |
+| `GET` | `/api/summarize/health` | 요약 서비스 상태 확인 |
 
-- **Content-Type**: `multipart/form-data`
-- **필드**: `audio` (파일), `language` (선택, 기본값 `ko`)
+### 회의 관리
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/api/meetings` | 회의 목록 조회 |
+| `GET` | `/api/meetings/stats` | 대시보드 통계 |
+| `GET` | `/api/meetings/chart-data` | 차트 데이터 |
+| `GET` | `/api/meetings/:id` | 회의 상세 조회 |
+| `POST` | `/api/meetings` | 회의 생성 |
+| `PUT` | `/api/meetings/:id` | 회의 수정 |
+| `DELETE` | `/api/meetings/:id` | 회의 삭제 |
+| `PATCH` | `/api/meetings/:id/action-items/:idx` | 액션 아이템 토글 |
+| `POST` | `/api/meetings/:id/send-email` | 회의록 메일 발송 |
+
+### 회의실 & 예약
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/api/rooms` | 회의실 목록 |
+| `GET` | `/api/rooms/availability` | 회의실 가용성 조회 |
+| `POST` | `/api/rooms/reservations` | 예약 생성 |
+| `GET` | `/api/rooms/reservations/list` | 예약 목록 |
+| `DELETE` | `/api/rooms/reservations/:id` | 예약 취소 |
+
+### 검색
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/api/search` | 회의 통합 검색 |
+| `GET` | `/api/search/suggest` | 검색 자동완성 |
+
+### 녹음 보관
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `POST` | `/api/recordings` | 녹음 파일 업로드 저장 |
+| `GET` | `/api/recordings` | 녹음 목록 조회 |
+| `GET` | `/api/recordings/:id` | 녹음 상세 조회 |
+| `GET` | `/api/recordings/:id/file` | 오디오 스트리밍 |
+| `DELETE` | `/api/recordings/:id` | 녹음 삭제 |
+| `POST` | `/api/recordings/:id/transcribe` | 저장된 녹음 STT 변환 |
+
+### AI 챗봇
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `POST` | `/api/chat/meeting/:id` | 단일 회의 Q&A |
+| `POST` | `/api/chat/search` | 전체 회의 검색 Q&A |
+
+---
+
+## 프론트엔드 라우트
+
+| 경로 | 페이지 | 설명 |
+|------|--------|------|
+| `/login` | 로그인 | 사용자 인증 (퍼블릭) |
+| `/` | 대시보드 | 통계, 최근 회의, 차트 |
+| `/meetings/new` | 새 회의 | 녹음/업로드 → STT → AI 요약 |
+| `/meetings` | 회의 목록 | 필터, 정렬, 검색 |
+| `/meetings/:id` | 회의 상세 | AI 요약, 액션 아이템, 전사 탭 |
+| `/recordings` | 녹음 보관 | 녹음 파일 관리 |
+| `/action-items` | 액션 아이템 | 전체 액션 아이템 관리 |
+| `/search` | 통합 검색 | 회의 검색 |
+| `/chat` | AI 챗봇 | 회의 기반 Q&A |
+| `/rooms` | 회의실 | 회의실 목록 & 상태 |
+| `/rooms/calendar` | 회의실 캘린더 | 주간 예약 캘린더 |
+| `/analysis` | 회의 분석 | 회의 트렌드 분석 |
+| `/reports` | 리포트 | 리포트 생성 |
+| `/settings` | 설정 | 사용자 설정 |
+| `/audit-log` | 감사 로그 | 관리자 전용 |
+
+---
+
+## 데이터베이스 스키마
+
+### meetings
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `id` | INT (PK, AUTO_INCREMENT) | 회의 ID |
+| `title` | VARCHAR(255) | 회의 제목 |
+| `date` | DATE | 회의 날짜 |
+| `time` | VARCHAR(10) | 시작 시간 (HH:MM) |
+| `duration` | INT | 회의 시간 (분) |
+| `participants` | JSON | 참석자 목록 |
+| `status` | ENUM | in-progress / completed / archived |
+| `tags` | JSON | 키워드 태그 |
+| `ai_summary` | TEXT | AI 생성 요약 |
+| `key_decisions` | JSON | 핵심 결정사항 |
+| `action_items` | JSON | 액션 아이템 |
+| `sentiment` | ENUM | positive / negative / neutral |
+| `transcript` | JSON | 발언 기록 [{speaker, time, text}] |
+| `full_text` | TEXT | STT 전체 텍스트 (FULLTEXT 인덱스) |
+| `speaker_map` | JSON | 화자 이름 매핑 |
+
+### rooms
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `id` | VARCHAR(20) (PK) | 회의실 ID |
+| `name` | VARCHAR(100) | 회의실 이름 |
+| `building` | VARCHAR(50) | 건물 |
+| `floor` | VARCHAR(20) | 층 |
+| `capacity` | INT | 수용 인원 |
+| `equipment` | JSON | 보유 장비 |
+| `status` | ENUM | available / maintenance |
+
+### reservations
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `id` | VARCHAR(50) (PK) | 예약 ID |
+| `room_id` | VARCHAR(20) (FK) | 회의실 ID |
+| `title` | VARCHAR(255) | 회의 주제 |
+| `date` | DATE | 예약 날짜 |
+| `start_time` / `end_time` | VARCHAR(10) | 시작/종료 시간 |
+| `organizer` | VARCHAR(50) | 주최자 |
+| `participants` | JSON | 참석자 |
+| `status` | ENUM | confirmed / cancelled |
+
+### recordings
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `id` | INT (PK, AUTO_INCREMENT) | 녹음 ID |
+| `file_name` | VARCHAR(255) | 파일명 |
+| `file_path` | VARCHAR(500) | 서버 저장 경로 |
+| `file_size` | BIGINT | 파일 크기 (바이트) |
+| `duration` | INT | 녹음 길이 (초) |
+| `status` | ENUM | pending / transcribed / completed |
+| `meeting_id` | INT (FK) | 연결된 회의 ID |
+
+---
+
+## NPM 스크립트
+
+| 명령어 | 설명 |
+|--------|------|
+| `npm run dev` | 프론트엔드 개발 서버 (포트 3000) |
+| `npm run dev:server` | 백엔드 서버 (포트 3001) |
+| `npm run dev:all` | 프론트엔드 + 백엔드 동시 실행 |
+| `npm run build` | 프로덕션 빌드 |
+| `npm run preview` | 빌드 결과 미리보기 |
+| `npm run db:init` | DB 초기화 (테이블 + 시드 데이터) |
+| `npm run db:migrate` | DB 마이그레이션 |
+| `npm test` | 단위 테스트 (Vitest) |
+| `npm run test:watch` | 테스트 워치 모드 |
+| `npm run test:e2e` | E2E 테스트 (Playwright) |
+
+---
+
+## 아키텍처
 
 ```
-25MB 이하 → 직접 Whisper API 전송
-25MB 초과 → ffmpeg 20MB 분할 → 순차 전사 → 타임스탬프 병합
+┌─────────────────┐     ┌─────────────────┐     ┌──────────────┐
+│   Vue.js SPA    │────▶│  Express API    │────▶│   MySQL DB   │
+│  (포트 3000)     │     │  (포트 3001)     │     │  (포트 30306) │
+└─────────────────┘     └────────┬────────┘     └──────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+             ┌──────────┐ ┌──────────┐ ┌──────────┐
+             │  OpenAI   │ │   Dify   │ │ Pyannote │
+             │  Whisper  │ │ Workflow │ │ Speaker  │
+             │  (STT)    │ │ (요약)    │ │ (화자분리) │
+             └──────────┘ └──────────┘ └──────────┘
 ```
 
-응답 예시:
-```json
-{
-  "success": true,
-  "data": {
-    "fullText": "전사된 전체 텍스트...",
-    "segments": [
-      { "id": 0, "start": 0.0, "end": 5.2, "text": "안녕하세요..." }
-    ],
-    "meta": {
-      "originalFileName": "회의녹음.webm",
-      "fileSizeMB": 12.5,
-      "totalDuration": 320.5,
-      "segmentCount": 48,
-      "chunkCount": 1,
-      "language": "ko"
-    }
-  }
-}
-```
+- Vite 개발 서버가 `/api` 요청을 Express 서버로 프록시
+- API 키는 모두 서버 사이드에서만 사용 (브라우저에 노출되지 않음)
+- 25MB 초과 오디오는 ffmpeg로 20MB 청크로 분할 후 순차 STT
+- Dify Workflow API 호출에 120초 타임아웃 적용
 
-### `GET /api/transcribe/health`
+---
 
-서비스 상태 및 OpenAI API 키 설정 여부를 확인합니다.
-
-## 환경 변수
+## 환경 변수 요약
 
 | 변수 | 필수 | 설명 | 기본값 |
-|------|------|------|--------|
-| `OPENAI_API_KEY` | O | OpenAI API 키 | — |
+|------|:----:|------|--------|
+| `OPENAI_API_KEY` | O | OpenAI API 키 (Whisper) | — |
+| `DIFY_API_KEY` | O | Dify Workflow API 키 | — |
+| `DIFY_API_URL` | O | Dify API URL | — |
+| `DIFY_CHATBOT_API_KEY` | X | 챗봇 전용 Dify 키 | — |
+| `DB_HOST` | X | MySQL 호스트 | `127.0.0.1` |
+| `DB_PORT` | X | MySQL 포트 | `30306` |
+| `DB_USER` | X | MySQL 사용자 | `root` |
+| `DB_PASSWORD` | X | MySQL 비밀번호 | `root` |
+| `DB_NAME` | X | MySQL 데이터베이스명 | `meetings` |
+| `DIARIZE_SERVICE_URL` | X | Pyannote 화자분리 URL | `http://localhost:5000` |
+| `SMTP_HOST` | X | SMTP 서버 호스트 | — |
+| `SMTP_PORT` | X | SMTP 포트 | — |
+| `SMTP_USER` | X | SMTP 사용자 | — |
+| `SMTP_PASS` | X | SMTP 비밀번호 | — |
 | `SERVER_PORT` | X | 백엔드 서버 포트 | `3001` |

@@ -426,7 +426,7 @@ router.post('/:id/send-email', async (req, res) => {
           </div>
           ` : ''}
 
-          <p style="font-size:11px;color:#94a3b8;margin-top:24px;text-align:center;">AI 스마트 회의록 Agent에서 자동 생성된 메일입니다.</p>
+          <p style="font-size:11px;color:#94a3b8;margin-top:24px;text-align:center;">NoteFlow에서 자동 생성된 메일입니다.</p>
         </div>
       </div>
     `

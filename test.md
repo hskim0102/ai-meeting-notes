@@ -1,4 +1,4 @@
-# AI Smart Meeting Notes - 테스트 및 버그 수정 보고서
+# NoteFlow - 테스트 및 버그 수정 보고서
 
 > 작성일: 2026-03-28
 > 대상: Phase 3 (AI 고도화) + Phase 4 (엔터프라이즈) 구현 후 품질 검증

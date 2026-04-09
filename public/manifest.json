@@ -1,7 +1,7 @@
 {
-  "name": "AI Smart Meeting Notes",
-  "short_name": "AI 회의록",
-  "description": "AI 기반 스마트 회의록 관리 시스템",
+  "name": "NoteFlow",
+  "short_name": "NoteFlow",
+  "description": "NoteFlow - 기록에서 흐름으로, 회의가 곧 실행이 되다",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

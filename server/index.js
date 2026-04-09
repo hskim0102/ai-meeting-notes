@@ -1,7 +1,7 @@
 /**
  * server/index.js - Express 백엔드 서버 진입점
  * ─────────────────────────────────────────────────
- * AI 스마트 회의록 백엔드 서버
+ * NoteFlow 백엔드 서버
  * - 오디오 파일 업로드 및 STT(음성→텍스트) 처리
  * - Vue.js 프론트엔드(포트 3000)와 CORS 연동
  * - localhost 전용 (배포 설정 없음)
@@ -97,7 +97,7 @@ app.use('/api/chat', chatRouter)
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {
   res.json({
-    name: 'AI 스마트 회의록 API',
+    name: 'NoteFlow API',
     version: '1.0.0',
     endpoints: {
       'POST /api/transcribe': '오디오 파일 업로드 및 STT 처리',
@@ -165,7 +165,7 @@ if (process.env.NODE_ENV !== 'test') {
     const dbOk = await testConnection()
     console.log('')
     console.log('═══════════════════════════════════════════════')
-    console.log('  AI 스마트 회의록 백엔드 서버')
+    console.log('  NoteFlow 백엔드 서버')
     console.log('═══════════════════════════════════════════════')
     console.log(`  서버 주소:  http://localhost:${PORT}`)
     console.log(`  API 문서:   http://localhost:${PORT}/api`)

@@ -20,7 +20,7 @@ const DB_NAME = process.env.DB_NAME || 'meetings'
 
 async function run() {
   console.log('═══════════════════════════════════════════════')
-  console.log('  AI 스마트 회의록 - 데이터베이스 초기화')
+  console.log('  NoteFlow - 데이터베이스 초기화')
   console.log('═══════════════════════════════════════════════')
   console.log(`  대상: ${DB_CONFIG.host}:${DB_CONFIG.port}`)
   console.log(`  DB명: ${DB_NAME}`)

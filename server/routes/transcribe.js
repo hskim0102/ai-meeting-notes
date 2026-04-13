@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url'
 import { splitAudio, needsSplitting, getAudioMetadata } from '../services/audioSplitter.js'
 import { transcribeSingleFile, transcribeChunks, mergeTranscripts } from '../services/whisperService.js'
 import { mergeWithSpeakers } from '../services/diarizationMerger.js'
+import { validate, transcriptCorrectionSchema } from '../services/validators.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
 const __filename = fileURLToPath(import.meta.url)
@@ -153,6 +154,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
     // ── 요청 바디에서 언어 옵션 추출 (기본값: 한국어) ──
     const language = req.body.language || 'ko'
     const enableDiarization = req.body.enableDiarization === 'true' || req.body.enableDiarization === true
+    const speakerCount = parseInt(req.body.speakerCount, 10) || 0
 
     let transcript
 
@@ -203,16 +205,27 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
     // ── 2.5단계: 화자 분리 (선택 사항) ──
     let diarizeResult = null
+    let diarizeError = null
     if (enableDiarization) {
       const diarizeUrl = process.env.DIARIZE_SERVICE_URL || 'http://localhost:5000'
       try {
-        console.log('[화자 분리] pyannote 서비스 호출 시작...')
+        // 서비스 가용성 사전 확인
+        const healthCtrl = new AbortController()
+        const healthTimeout = setTimeout(() => healthCtrl.abort(), 5_000)
+        const healthRes = await fetch(`${diarizeUrl}/diarize/health`, { signal: healthCtrl.signal })
+        clearTimeout(healthTimeout)
+        if (!healthRes.ok) throw new Error('화자 분리 서비스 응답 이상')
+
+        console.log(`[화자 분리] pyannote 서비스 호출 시작...${speakerCount > 0 ? ` (힌트: ${speakerCount}명)` : ''}`)
         const formData = new FormData()
         const fileBuffer = fs.readFileSync(uploadedFilePath)
         formData.append('file', new Blob([fileBuffer]), originalName)
+        if (speakerCount > 0) {
+          formData.append('num_speakers', String(speakerCount))
+        }
 
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 300_000) // 5분 타임아웃
+        const timeout = setTimeout(() => controller.abort(), 300_000)
 
         const diarizeRes = await fetch(`${diarizeUrl}/diarize`, {
           method: 'POST',
@@ -226,10 +239,15 @@ router.post('/', upload.single('audio'), async (req, res) => {
           console.log(`[화자 분리] 완료: ${diarizeResult.num_speakers}명 감지, ${diarizeResult.segments.length}개 세그먼트`)
           transcript.segments = mergeWithSpeakers(transcript.segments, diarizeResult.segments)
         } else {
-          console.warn(`[화자 분리] 서비스 응답 오류 (HTTP ${diarizeRes.status}), 화자 분리 없이 계속 진행`)
+          const errBody = await diarizeRes.text().catch(() => '')
+          diarizeError = `화자 분리 서비스 오류 (HTTP ${diarizeRes.status}): ${errBody || '알 수 없는 오류'}`
+          console.warn(`[화자 분리] ${diarizeError}`)
         }
       } catch (err) {
-        console.warn(`[화자 분리] 실패 (${err.message}), 화자 분리 없이 계속 진행`)
+        diarizeError = err.name === 'AbortError'
+          ? '화자 분리 서비스에 연결할 수 없습니다. pyannote 서비스가 실행 중인지 확인해주세요.'
+          : `화자 분리 실패: ${err.message}`
+        console.warn(`[화자 분리] ${diarizeError}`)
       }
     }
 
@@ -269,6 +287,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             numSpeakers: diarizeResult.num_speakers,
             processingTime: diarizeResult.processing_time_sec,
           } : null,
+          diarizationError: diarizeError || null,
         },
       },
     })
@@ -314,6 +333,48 @@ router.get('/health', (req, res) => {
     service: 'transcribe',
     openaiConfigured: hasApiKey,
     timestamp: new Date().toISOString(),
+  })
+})
+
+// ─────────────────────────────────────────────────
+// PATCH /api/transcribe/correct - 키워드 일괄 교정
+// ─────────────────────────────────────────────────
+
+router.patch('/correct', validate(transcriptCorrectionSchema), (req, res) => {
+  const { fullText, segments, corrections } = req.body
+
+  // 긴 키워드부터 먼저 치환 (짧은 키워드가 긴 키워드의 일부를 먼저 바꾸는 문제 방지)
+  const sorted = [...corrections].sort((a, b) => b.original.length - a.original.length)
+
+  let correctedText = fullText
+  const correctedSegments = segments.map(seg => ({ ...seg }))
+  let appliedCount = 0
+
+  for (const { original, corrected } of sorted) {
+    if (original === corrected) continue
+
+    // fullText 교정
+    const parts = correctedText.split(original)
+    if (parts.length > 1) {
+      appliedCount += parts.length - 1
+      correctedText = parts.join(corrected)
+    }
+
+    // 각 세그먼트 텍스트 교정
+    for (const seg of correctedSegments) {
+      seg.text = seg.text.split(original).join(corrected)
+    }
+  }
+
+  console.log(`[키워드 교정] ${corrections.length}개 규칙 적용 → ${appliedCount}건 치환`)
+
+  res.json({
+    success: true,
+    data: {
+      fullText: correctedText,
+      segments: correctedSegments,
+      appliedCount,
+    },
   })
 })
 

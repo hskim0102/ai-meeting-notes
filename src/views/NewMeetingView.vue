@@ -4,7 +4,9 @@ import { useRouter } from 'vue-router'
 import { useDarkMode } from '../composables/useDarkMode.js'
 import AudioUploader from '../components/AudioUploader.vue'
 import LiveRecorder from '../components/LiveRecorder.vue'
-import { summarizeTranscript, createMeeting } from '../services/api.js'
+import SpeakerTimeline from '../components/SpeakerTimeline.vue'
+import KeywordCorrection from '../components/KeywordCorrection.vue'
+import { summarizeTranscript, createMeeting, extractKeywords as extractKeywordsApi } from '../services/api.js'
 
 const { isDark } = useDarkMode()
 
@@ -25,9 +27,11 @@ const inputMode = ref('record')
 
 // 화자 분리 옵션
 const enableDiarization = ref(false)
+const speakerCount = ref(2)
 
 // 전사 결과 데이터
 const transcriptResult = ref(null)
+const audioBlobUrl = ref('')
 
 // AI 요약 결과 데이터
 const summaryResult = ref(null)
@@ -38,6 +42,11 @@ const summaryError = ref('')
 
 // 전체 텍스트 접이식 상태
 const showFullText = ref(false)
+
+// ── 키워드 추출 관련 상태 ──
+const extractedKeywords = ref([])
+const isExtractingKeywords = ref(false)
+const keywordError = ref('')
 
 // ── DB 저장 관련 상태 ──
 const saveForm = ref({
@@ -52,6 +61,12 @@ const saveError = ref('')
 const toast = ref({ show: false, message: '', type: 'success' })
 
 function onTranscribed(data) {
+  // 이전 Blob URL 해제
+  if (audioBlobUrl.value) {
+    URL.revokeObjectURL(audioBlobUrl.value)
+  }
+  audioBlobUrl.value = data.audioBlobUrl || ''
+
   transcriptResult.value = data
   summaryResult.value = null
   summaryError.value = ''
@@ -64,6 +79,43 @@ function onTranscribed(data) {
 
   // 자동으로 Step 2로 이동
   currentStep.value = 2
+}
+
+// ── 타임라인 텍스트 인라인 수정 ──
+function onTranscriptTextEdit({ index, text }) {
+  if (!transcriptResult.value?.segments?.[index]) return
+  transcriptResult.value.segments[index].text = text
+  // fullText도 동기화
+  transcriptResult.value.fullText = transcriptResult.value.segments
+    .map(seg => seg.text)
+    .join(' ')
+}
+
+// ── AI 키워드 추출 ──
+async function requestKeywordExtraction() {
+  if (!transcriptResult.value?.fullText) return
+  isExtractingKeywords.value = true
+  keywordError.value = ''
+
+  try {
+    const res = await extractKeywordsApi(transcriptResult.value.fullText)
+    if (res.success) {
+      extractedKeywords.value = res.data.keywords
+    }
+  } catch (err) {
+    keywordError.value = err.message
+  } finally {
+    isExtractingKeywords.value = false
+  }
+}
+
+// ── 키워드 교정 적용 ──
+function onCorrectionsApplied(data) {
+  transcriptResult.value.fullText = data.fullText
+  transcriptResult.value.segments = data.segments
+  showToast(`${data.appliedCount}건 교정 완료`)
+  // 키워드를 교정된 값으로 갱신
+  extractedKeywords.value = []
 }
 
 async function requestSummary() {
@@ -162,6 +214,12 @@ function formatTime(seconds) {
 }
 
 function resetResult() {
+  if (audioBlobUrl.value) {
+    URL.revokeObjectURL(audioBlobUrl.value)
+    audioBlobUrl.value = ''
+  }
+  extractedKeywords.value = []
+  keywordError.value = ''
   transcriptResult.value = null
   summaryResult.value = null
   summaryError.value = ''
@@ -305,16 +363,28 @@ function goToStep(step) {
       </div>
 
       <!-- 화자 분리 옵션 -->
-      <div class="mb-4 px-1">
-        <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+      <div class="mb-4 px-1 space-y-2">
+        <label class="flex items-center gap-2 text-sm" :class="isDark ? 'text-slate-400' : 'text-slate-600'">
           <input type="checkbox" v-model="enableDiarization" class="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
           화자 분리 (누가 말했는지 자동 구분)
         </label>
+        <div v-if="enableDiarization" class="flex items-center gap-3 pl-6">
+          <label class="text-xs" :class="isDark ? 'text-slate-400' : 'text-slate-500'">참석 인원 수</label>
+          <input
+            type="number"
+            v-model.number="speakerCount"
+            min="1"
+            max="20"
+            class="w-16 text-sm text-center border rounded-lg py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            :class="isDark ? 'bg-slate-700 border-slate-600 text-slate-200' : 'border-slate-300'"
+          />
+          <span class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">명 (정확도 향상에 도움)</span>
+        </div>
       </div>
 
       <!-- 입력 컴포넌트 -->
-      <LiveRecorder v-if="inputMode === 'record'" :enable-diarization="enableDiarization" @transcribed="onTranscribed" />
-      <AudioUploader v-else :enable-diarization="enableDiarization" @transcribed="onTranscribed" />
+      <LiveRecorder v-if="inputMode === 'record'" :enable-diarization="enableDiarization" :speaker-count="speakerCount" @transcribed="onTranscribed" />
+      <AudioUploader v-else :enable-diarization="enableDiarization" :speaker-count="speakerCount" @transcribed="onTranscribed" />
     </div>
 
     <!-- ════════════════════════════════════════════════ -->
@@ -349,6 +419,26 @@ function goToStep(step) {
         </div>
       </div>
 
+      <!-- 화자 분리 실패 경고 -->
+      <div
+        v-if="transcriptResult.meta?.diarizationError"
+        class="rounded-xl border p-4 flex items-start gap-3"
+        :class="isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'"
+      >
+        <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+        <div>
+          <p class="text-sm font-medium" :class="isDark ? 'text-amber-300' : 'text-amber-700'">화자 분리 실패</p>
+          <p class="text-xs mt-1" :class="isDark ? 'text-amber-400/80' : 'text-amber-600'">
+            {{ transcriptResult.meta.diarizationError }}
+          </p>
+          <p class="text-xs mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+            STT 텍스트는 정상 변환되었으나, 화자 구분 없이 표시됩니다.
+          </p>
+        </div>
+      </div>
+
       <!-- 전체 텍스트 미리보기 (접이식) -->
       <div class="rounded-xl border" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
         <button
@@ -377,31 +467,69 @@ function goToStep(step) {
         </div>
       </div>
 
-      <!-- 타임라인 세그먼트 (접이식) -->
-      <details v-if="transcriptResult.segments?.length" class="rounded-xl border" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
-        <summary class="p-5 cursor-pointer text-base font-semibold rounded-xl flex items-center gap-2"
-          :class="isDark ? 'text-slate-100 hover:bg-slate-700/50' : 'text-slate-900 hover:bg-slate-50'">
-          <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          타임라인 ({{ transcriptResult.segments.length }}개 세그먼트)
-        </summary>
-        <div class="px-5 pb-5">
-          <div class="space-y-2 max-h-64 overflow-y-auto">
-            <div
-              v-for="seg in transcriptResult.segments"
-              :key="seg.id"
-              class="flex gap-3 py-2 px-3 rounded-lg"
-              :class="isDark ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'"
-            >
-              <span class="text-xs font-mono text-primary-500 shrink-0 pt-0.5 w-24">
-                {{ formatTime(seg.start) }} ~ {{ formatTime(seg.end) }}
-              </span>
-              <p class="text-sm" :class="isDark ? 'text-slate-300' : 'text-slate-700'">{{ seg.text }}</p>
-            </div>
+      <!-- 타임라인 + 오디오 플레이어 -->
+      <SpeakerTimeline
+        v-if="transcriptResult.segments?.length"
+        :transcript="transcriptResult.segments.map(seg => ({
+          speaker: seg.speaker || '화자',
+          time: formatTime(seg.start),
+          text: seg.text,
+        }))"
+        :audio-src="audioBlobUrl"
+        :editable="true"
+        @update:text="onTranscriptTextEdit"
+      />
+
+      <!-- ── 키워드 교정 영역 ── -->
+      <div class="rounded-xl border p-5" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
+        <!-- 키워드 미추출 상태 -->
+        <div v-if="!extractedKeywords.length && !isExtractingKeywords">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-base font-semibold flex items-center gap-2" :class="isDark ? 'text-slate-100' : 'text-slate-900'">
+              <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" />
+              </svg>
+              키워드 교정
+            </h3>
+          </div>
+          <p class="text-sm mb-4" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+            AI가 텍스트에서 인명, 프로젝트명, 전문 용어를 자동 추출합니다. 잘못 인식된 단어를 수정하면 전체 텍스트에 일괄 반영됩니다.
+          </p>
+          <button
+            @click="requestKeywordExtraction"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+            :class="isDark
+              ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30'
+              : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+            </svg>
+            AI 키워드 추출
+          </button>
+          <!-- 에러 -->
+          <div v-if="keywordError" class="mt-3 p-2 rounded-lg bg-danger-50 border border-danger-200">
+            <p class="text-xs text-danger-600">{{ keywordError }}</p>
+            <button @click="requestKeywordExtraction" class="text-xs text-danger-500 underline mt-1">다시 시도</button>
           </div>
         </div>
-      </details>
+
+        <!-- 추출 중 로딩 -->
+        <div v-else-if="isExtractingKeywords" class="flex items-center gap-3 py-4">
+          <div class="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-sm" :class="isDark ? 'text-slate-300' : 'text-slate-600'">AI가 핵심 키워드를 추출하고 있습니다...</span>
+        </div>
+
+        <!-- 키워드 교정 컴포넌트 -->
+        <KeywordCorrection
+          v-else
+          :keywords="extractedKeywords"
+          :full-text="transcriptResult.fullText"
+          :segments="transcriptResult.segments"
+          @applied="onCorrectionsApplied"
+        />
+      </div>
 
       <!-- 하단 버튼 -->
       <div class="flex justify-between pt-2">

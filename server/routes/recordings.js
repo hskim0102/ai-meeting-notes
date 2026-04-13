@@ -286,6 +286,28 @@ router.delete('/:id', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────
+// PATCH /api/recordings/:id/link - 녹음과 회의 연결
+// ─────────────────────────────────────────────────
+
+router.patch('/:id/link', async (req, res) => {
+  try {
+    const { meetingId } = req.body
+    if (!meetingId) {
+      return res.status(400).json({ success: false, error: 'meetingId가 필요합니다.' })
+    }
+
+    await query(
+      'UPDATE recordings SET meeting_id = ?, status = ? WHERE id = ?',
+      [meetingId, 'completed', req.params.id]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+// ─────────────────────────────────────────────────
 // POST /api/recordings/:id/transcribe - 저장된 녹음으로 STT 실행
 // ─────────────────────────────────────────────────
 

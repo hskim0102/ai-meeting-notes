@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Speaker Diarization Service")
@@ -43,7 +43,10 @@ async def health():
 
 
 @app.post("/diarize")
-async def diarize(file: UploadFile = File(...)):
+async def diarize(
+    file: UploadFile = File(...),
+    num_speakers: int = Form(default=None),
+):
     """오디오 파일을 받아 화자 세그먼트를 반환"""
     tmp_path = None
     suffix = Path(file.filename).suffix if file.filename else ".wav"
@@ -55,7 +58,13 @@ async def diarize(file: UploadFile = File(...)):
     try:
         pipeline = get_pipeline()
         start_time = time.time()
-        diarization = pipeline(tmp_path)
+
+        # num_speakers 힌트가 있으면 전달하여 클러스터링 정확도 향상
+        kwargs = {}
+        if num_speakers and num_speakers >= 1:
+            kwargs["num_speakers"] = num_speakers
+
+        diarization = pipeline(tmp_path, **kwargs)
         elapsed = time.time() - start_time
 
         segments = []

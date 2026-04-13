@@ -9,7 +9,7 @@ import SkeletonLoader from '../components/SkeletonLoader.vue'
 import MeetingChatbot from '../components/MeetingChatbot.vue'
 import SpeakerTimeline from '../components/SpeakerTimeline.vue'
 import CollaborationIndicator from '../components/CollaborationIndicator.vue'
-import { fetchMeeting, updateMeeting, sendMeetingEmail, updateSpeakerMap } from '../services/api.js'
+import { fetchMeeting, updateMeeting, sendMeetingEmail, updateSpeakerMap, fetchMeetingRecording, getRecordingFileUrl } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
@@ -19,6 +19,7 @@ const router = useRouter()
 const activeTab = ref('summary')
 const meetingData = ref(null)
 const loading = ref(true)
+const audioSrc = ref('')
 
 // ── 편집 모드 상태 ──
 const isEditing = ref(false)
@@ -62,6 +63,14 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+
+  // 연결된 녹음 파일 조회
+  try {
+    const recRes = await fetchMeetingRecording(route.params.id)
+    if (recRes.success && recRes.data) {
+      audioSrc.value = getRecordingFileUrl(recRes.data.id)
+    }
+  } catch { /* 녹음 없으면 무시 */ }
 })
 
 const meeting = computed(() => meetingData.value)
@@ -506,6 +515,7 @@ const sentimentColor = computed(() => {
         <SpeakerTimeline
           :transcript="meeting.transcript"
           :speaker-map="speakerMap"
+          :audio-src="audioSrc"
           @edit-speaker="openSpeakerEdit"
         />
       </div>

@@ -207,6 +207,37 @@ router.get('/chart-data', async (req, res) => {
 })
 
 // ── 회의 상세 조회 ──
+// ── 회의에 연결된 녹음 조회 ──
+router.get('/:id/recording', async (req, res) => {
+  try {
+    const rows = await query(
+      'SELECT id, file_name, file_size, mime_type, duration, status FROM recordings WHERE meeting_id = ? LIMIT 1',
+      [req.params.id]
+    )
+
+    if (rows.length === 0) {
+      return res.json({ success: true, data: null })
+    }
+
+    const row = rows[0]
+    res.json({
+      success: true,
+      data: {
+        id: row.id,
+        fileName: row.file_name,
+        fileSize: row.file_size,
+        mimeType: row.mime_type,
+        duration: row.duration,
+        status: row.status,
+      },
+    })
+  } catch (err) {
+    console.error('[녹음 조회 에러]', err.message)
+    res.status(500).json({ success: false, error: '녹음 조회 실패' })
+  }
+})
+
+// ── 회의 상세 조회 ──
 router.get('/:id', async (req, res) => {
   try {
     const rows = await query('SELECT * FROM meetings WHERE id = ?', [req.params.id])

@@ -4,6 +4,7 @@ import { transcribeAudio } from '../services/api.js'
 
 const props = defineProps({
   enableDiarization: { type: Boolean, default: false },
+  speakerCount: { type: Number, default: 0 },
 })
 const emit = defineEmits(['transcribed'])
 
@@ -29,9 +30,11 @@ async function handleFile(file) {
       if (progress >= 100) {
         status.value = 'processing'
       }
-    }, props.enableDiarization)
+    }, props.enableDiarization, props.speakerCount)
 
     if (result.success) {
+      // 오디오 파일의 Blob URL을 결과에 포함
+      result.data.audioBlobUrl = URL.createObjectURL(file)
       emit('transcribed', result.data)
     } else {
       error.value = result.error || '전사 처리에 실패했습니다.'

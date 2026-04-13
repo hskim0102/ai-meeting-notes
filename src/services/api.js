@@ -9,12 +9,15 @@ const API_BASE = '/api'
  * @param {function} onProgress - 업로드 진행률 콜백 (0~100)
  * @returns {Promise<object>} - { success, data: { fullText, segments, meta } }
  */
-export async function transcribeAudio(file, language = 'ko', onProgress = null, enableDiarization = false) {
+export async function transcribeAudio(file, language = 'ko', onProgress = null, enableDiarization = false, speakerCount = 0) {
   const formData = new FormData()
   formData.append('audio', file)
   formData.append('language', language)
   if (enableDiarization) {
     formData.append('enableDiarization', 'true')
+    if (speakerCount > 0) {
+      formData.append('speakerCount', String(speakerCount))
+    }
   }
 
   return new Promise((resolve, reject) => {
@@ -367,6 +370,16 @@ export async function fetchRecording(id) {
 }
 
 /**
+ * 회의에 연결된 녹음 정보 조회
+ */
+export async function fetchMeetingRecording(meetingId) {
+  const res = await fetch(`${API_BASE}/meetings/${meetingId}/recording`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '녹음 조회 실패')
+  return data
+}
+
+/**
  * 녹음 파일 스트리밍 URL 반환
  */
 export function getRecordingFileUrl(id) {
@@ -397,6 +410,38 @@ export async function transcribeRecording(id, language = 'ko') {
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'STT 변환 실패')
+  return data
+}
+
+// ─────────────────────────────────────────────────
+// 키워드 추출 & 교정 API
+// ─────────────────────────────────────────────────
+
+/**
+ * AI 키워드 추출
+ */
+export async function extractKeywords(text) {
+  const res = await fetch(`${API_BASE}/keywords/extract`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '키워드 추출 실패')
+  return data
+}
+
+/**
+ * 키워드 일괄 교정
+ */
+export async function applyTranscriptCorrections(fullText, segments, corrections) {
+  const res = await fetch(`${API_BASE}/transcribe/correct`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fullText, segments, corrections }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '일괄 교정 실패')
   return data
 }
 

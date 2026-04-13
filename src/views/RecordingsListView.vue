@@ -146,6 +146,15 @@ async function handleCreateMeeting(recordingId) {
     const createRes = await createMeeting(meetingData)
 
     if (createRes.success) {
+      // 녹음과 회의 연결
+      try {
+        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}/recordings/${recordingId}/link`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ meetingId: createRes.data.id }),
+        })
+      } catch { /* 연결 실패해도 회의록 생성은 성공 */ }
+
       showToast('회의록이 생성되었습니다.')
       transcriptResult.value = null
       activeRecordingId.value = null

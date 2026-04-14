@@ -292,6 +292,19 @@ router.post('/', async (req, res) => {
     const [newMeeting] = await query('SELECT * FROM meetings WHERE id = ?', [result.insertId])
     console.log(`[회의 생성] ID: ${result.insertId} - ${title}`)
 
+    // ── Dify 웹훅 트리거 (RAG 자동 생성) — 비동기 fire-and-forget ──
+    const webhookUrl = process.env.DIFY_WEBHOOK_URL
+    if (webhookUrl) {
+      const meetingPayload = formatMeeting(newMeeting)
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: String(result.insertId), gubun: '1', meetings_note: JSON.stringify(meetingPayload) }),
+      })
+        .then(r => console.log(`[Dify 웹훅] 트리거 성공 — ID: ${result.insertId}, status: ${r.status}`))
+        .catch(err => console.error(`[Dify 웹훅] 트리거 실패 — ID: ${result.insertId}:`, err.message))
+    }
+
     res.status(201).json({ success: true, data: formatMeeting(newMeeting) })
   } catch (err) {
     console.error('[회의 생성 에러]', err.message)
@@ -344,6 +357,20 @@ router.put('/:id', async (req, res) => {
 
     const [updated] = await query('SELECT * FROM meetings WHERE id = ?', [req.params.id])
     console.log(`[회의 수정] ID: ${req.params.id}`)
+
+    // ── Dify 웹훅 트리거 (RAG 자동 생성) — 비동기 fire-and-forget ──
+    const webhookUrl = process.env.DIFY_WEBHOOK_URL
+    if (webhookUrl) {
+      const meetingPayload = formatMeeting(updated)
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: String(req.params.id), gubun: '2', meetings_note: JSON.stringify(meetingPayload) }),
+      })
+        .then(r => console.log(`[Dify 웹훅] 트리거 성공 — ID: ${req.params.id}, status: ${r.status}`))
+        .catch(err => console.error(`[Dify 웹훅] 트리거 실패 — ID: ${req.params.id}:`, err.message))
+    }
+
     res.json({ success: true, data: formatMeeting(updated) })
   } catch (err) {
     console.error('[회의 수정 에러]', err.message)

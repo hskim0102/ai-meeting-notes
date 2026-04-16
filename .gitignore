@@ -17,3 +17,4 @@ server/temp/
 # IDE
 .vscode/
 .idea/
+env.txt

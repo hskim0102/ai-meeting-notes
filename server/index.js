@@ -96,6 +96,9 @@ app.use('/api/recordings', recordingsRouter)
 // 챗봇 Q&A 엔드포인트
 app.use('/api/chat', chatRouter)
 
+// AI 키워드 추출 엔드포인트
+app.use('/api/keywords', keywordsRouter)
+
 // Dify 챗봇 / 지식 베이스 엔드포인트
 app.use('/api/chatBot', chatBotRouter)
 

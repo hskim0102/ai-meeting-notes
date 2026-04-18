@@ -231,6 +231,47 @@ export async function searchSuggest(q) {
 }
 
 // ─────────────────────────────────────────────────
+// Dify 챗봇 / 지식 베이스 API
+// ─────────────────────────────────────────────────
+
+/**
+ * Dify 지식 리스트 조회
+ * @param {number} page - 페이지 번호 (기본값: 1)
+ * @param {number} limit - 페이지당 항목 수 (기본값: 20)
+ */
+export async function fetchDifyDatasets(page = 1, limit = 20) {
+  const res = await fetch(`${API_BASE}/chatBot/datasets?page=${page}&limit=${limit}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Dify 지식 리스트 조회 실패')
+  return data
+}
+
+/**
+ * Dify 지식 문서 리스트 조회
+ * @param {string} datasetId - 지식 베이스 ID
+ * @param {number} page - 페이지 번호 (기본값: 1)
+ * @param {number} limit - 페이지당 항목 수 (기본값: 20)
+ */
+export async function fetchDifyDocuments(datasetId, page = 1, limit = 20) {
+  const res = await fetch(`${API_BASE}/chatBot/datasets/${datasetId}/documents?page=${page}&limit=${limit}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Dify 문서 리스트 조회 실패')
+  return data
+}
+
+/**
+ * Dify 문서 상세 조회
+ * @param {string} datasetId - 지식 베이스 ID
+ * @param {string} documentId - 문서 ID
+ */
+export async function fetchDifyDocument(datasetId, documentId) {
+  const res = await fetch(`${API_BASE}/chatBot/datasets/${datasetId}/documents/${documentId}`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Dify 문서 상세 조회 실패')
+  return data
+}
+
+// ─────────────────────────────────────────────────
 // 회의실 및 예약 API
 // ─────────────────────────────────────────────────
 

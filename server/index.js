@@ -25,6 +25,7 @@ import meetingsRouter from './routes/meetings.js'
 import recordingsRouter from './routes/recordings.js'
 import chatRouter from './routes/chat.js'
 import keywordsRouter from './routes/keywords.js'
+import chatBotRouter from './routes/chatBot.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -95,8 +96,8 @@ app.use('/api/recordings', recordingsRouter)
 // 챗봇 Q&A 엔드포인트
 app.use('/api/chat', chatRouter)
 
-// AI 키워드 추출 엔드포인트
-app.use('/api/keywords', keywordsRouter)
+// Dify 챗봇 / 지식 베이스 엔드포인트
+app.use('/api/chatBot', chatBotRouter)
 
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {

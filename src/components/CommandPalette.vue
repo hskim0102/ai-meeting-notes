@@ -20,6 +20,7 @@ const commands = [
   { id: 'nav-search', type: 'nav', label: '회의 검색', description: '키워드로 회의 통합 검색', path: '/search', icon: 'search' },
   { id: 'nav-rooms', type: 'nav', label: '회의실 예약', description: '회의실 목록 및 예약', path: '/rooms', icon: 'rooms' },
   { id: 'nav-calendar', type: 'nav', label: '회의실 캘린더', description: '주간 캘린더로 예약 현황 보기', path: '/rooms/calendar', icon: 'calendar' },
+  { id: 'nav-knowledge', type: 'nav', label: '회의목록 (지식기반)', description: 'Dify 지식 베이스 기반 회의목록 조회', path: '/knowledge-meetings', icon: 'knowledge' },
 ]
 
 const filteredCommands = computed(() => {
@@ -144,6 +145,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
                 </svg>
                 <svg v-else-if="cmd.icon === 'rooms'" class="w-4 h-4" :class="isDark ? 'text-slate-300' : 'text-slate-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21" />
+                </svg>
+                <svg v-else-if="cmd.icon === 'knowledge'" class="w-4 h-4" :class="isDark ? 'text-slate-300' : 'text-slate-500'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
                 </svg>
               </div>
               <!-- 텍스트 -->

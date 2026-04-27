@@ -122,6 +122,22 @@ async function run() {
   `)
   console.log('  ✓ recordings 테이블')
 
+  // meetings ↔ Dify RAG 도큐먼트 매핑 테이블
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS meeting_rag_docs (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      meeting_id  INT NOT NULL,
+      document_id VARCHAR(255) DEFAULT NULL COMMENT 'Dify 지식 도큐먼트 ID',
+      status      ENUM('pending','completed','failed') DEFAULT 'pending',
+      error_msg   TEXT DEFAULT NULL,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_meeting_id (meeting_id),
+      FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='meetings ↔ Dify RAG 도큐먼트 매핑'
+  `)
+  console.log('  ✓ meeting_rag_docs 테이블')
+
   // ── 3. 시드 데이터 삽입 ──
   console.log('[4/4] 시드 데이터 삽입 중...')
 

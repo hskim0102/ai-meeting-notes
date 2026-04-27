@@ -9,6 +9,7 @@
     "dev:all": "npm run dev & npm run dev:server",
     "db:init": "node server/scripts/initDb.js",
     "db:migrate": "node server/scripts/addSpeakerMap.js",
+    "db:migrate:rag": "node server/scripts/addRagDocsTable.js",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

@@ -9,7 +9,7 @@ import SkeletonLoader from '../components/SkeletonLoader.vue'
 import MeetingChatbot from '../components/MeetingChatbot.vue'
 import SpeakerTimeline from '../components/SpeakerTimeline.vue'
 import CollaborationIndicator from '../components/CollaborationIndicator.vue'
-import { fetchMeeting, updateMeeting, sendMeetingEmail, updateSpeakerMap, fetchMeetingRecording, getRecordingFileUrl } from '../services/api.js'
+import { fetchMeeting, updateMeeting, deleteMeeting, sendMeetingEmail, updateSpeakerMap, fetchMeetingRecording, getRecordingFileUrl, generateMeetingRag } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
@@ -25,6 +25,39 @@ const audioSrc = ref('')
 const isEditing = ref(false)
 const saving = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' })
+
+// ── 삭제 모달 상태 ──
+const showDeleteModal = ref(false)
+const deleting = ref(false)
+
+async function confirmDelete() {
+  deleting.value = true
+  try {
+    await deleteMeeting(route.params.id)
+    router.push('/')
+  } catch (err) {
+    showDeleteModal.value = false
+    toast.value = { show: true, message: `삭제 실패: ${err.message}`, type: 'error' }
+    setTimeout(() => { toast.value.show = false }, 4000)
+  } finally {
+    deleting.value = false
+  }
+}
+
+// [임시] 기존 회의록 RAG 수동 생성용 — 작업 완료 후 삭제 예정
+const generatingRag = ref(false)
+async function generateRag() {
+  generatingRag.value = true
+  try {
+    const res = await generateMeetingRag(route.params.id)
+    toast.value = { show: true, message: `RAG 생성 완료 (document_id: ${res.data.documentId})`, type: 'success' }
+  } catch (err) {
+    toast.value = { show: true, message: `RAG 생성 실패: ${err.message}`, type: 'error' }
+  } finally {
+    generatingRag.value = false
+    setTimeout(() => { toast.value.show = false }, 4000)
+  }
+}
 
 // 편집용 임시 데이터 (원본 보존)
 const editData = reactive({
@@ -423,6 +456,13 @@ const sentimentColor = computed(() => {
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
           편집
         </button>
+        <button
+          @click="showDeleteModal = true"
+          class="px-4 py-2 text-sm font-medium border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 text-red-500"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+          삭제
+        </button>
       </template>
       <template v-else>
         <button
@@ -440,6 +480,19 @@ const sentimentColor = computed(() => {
           취소
         </button>
       </template>
+      <!-- [임시] RAG 수동 생성 버튼 — 기존 회의록 document_id 채우기 완료 후 삭제 예정 -->
+      <button
+        @click="generateRag"
+        :disabled="generatingRag"
+        class="px-4 py-2 text-sm font-medium border border-orange-300 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 text-orange-600 hover:bg-orange-50"
+        title="[임시] Dify RAG 수동 생성"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+        </svg>
+        {{ generatingRag ? 'RAG 생성 중...' : '[임시] RAG 생성' }}
+      </button>
+
       <!-- Word 다운로드 -->
       <button
         @click="downloadWord"
@@ -819,6 +872,38 @@ const sentimentColor = computed(() => {
               {{ sendingEmail ? '발송 중...' : '발송하기' }}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- 회의 삭제 확인 모달 -->
+  <Teleport to="body">
+    <div v-if="showDeleteModal" class="fixed inset-0 z-40 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="showDeleteModal = false"></div>
+      <div class="relative z-10 w-full max-w-sm mx-4 rounded-2xl shadow-xl p-6" :class="isDark ? 'bg-slate-800' : 'bg-white'">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+          </div>
+          <div>
+            <h3 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">회의록 삭제</h3>
+            <p class="text-sm mt-0.5" :class="isDark ? 'text-slate-400' : 'text-slate-500'">이 작업은 되돌릴 수 없습니다.</p>
+          </div>
+        </div>
+        <p class="text-sm mb-6" :class="isDark ? 'text-slate-300' : 'text-slate-600'">
+          <span class="font-medium">{{ meeting?.title }}</span> 회의록과 연결된 RAG 데이터를 모두 삭제합니다. 계속하시겠습니까?
+        </p>
+        <div class="flex justify-end gap-2">
+          <button @click="showDeleteModal = false" :disabled="deleting" class="px-4 py-2 text-sm font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 disabled:opacity-50">취소</button>
+          <button
+            @click="confirmDelete"
+            :disabled="deleting"
+            class="px-4 py-2 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg v-if="deleting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            {{ deleting ? '삭제 중...' : '삭제' }}
+          </button>
         </div>
       </div>
     </div>

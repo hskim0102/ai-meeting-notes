@@ -307,14 +307,14 @@ router.post('/', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: '1', meetings_note: JSON.stringify(meetingPayload) },
+          inputs: { id: String(meetingId), gubun: 'C', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
           response_mode: 'blocking',
           user: 'rag-agent',
         }),
       })
         .then(async r => {
           const body = await r.json().catch(() => ({}))
-          const documentId = body?.data?.outputs?.document_id || null
+          const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
           await query(
             'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',
             [documentId, documentId ? 'completed' : 'failed', meetingId]
@@ -405,14 +405,14 @@ router.put('/:id', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: '2', document_id: existingDocumentId || '', meetings_note: JSON.stringify(meetingPayload) },
+          inputs: { id: String(meetingId), gubun: 'U', document_id: existingDocumentId || '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
           response_mode: 'blocking',
           user: 'rag-agent',
         }),
       })
         .then(async r => {
           const body = await r.json().catch(() => ({}))
-          const documentId = body?.data?.outputs?.document_id || body?.data?.document_id || body?.document_id || null
+          const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
           await query(
             'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',
             [documentId, documentId ? 'completed' : 'failed', meetingId]
@@ -443,8 +443,43 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: '회의를 찾을 수 없습니다.' })
     }
 
-    await query('DELETE FROM meetings WHERE id = ?', [req.params.id])
-    console.log(`[회의 삭제] ID: ${req.params.id} - ${rows[0].title}`)
+    const meetingId = parseInt(req.params.id, 10)
+
+    // document_id 있으면 Dify에 삭제 요청 (gubun=D)
+    const [ragRow] = await query('SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?', [meetingId])
+    if (ragRow?.document_id) {
+      const ragApiKey = process.env.DIFY_RAG_AGENT_API_KEY
+      const ragApiUrl = process.env.DIFY_API_URL
+      if (!ragApiKey || !ragApiUrl) {
+        return res.status(500).json({ success: false, error: 'Dify 환경변수가 설정되지 않았습니다.' })
+      }
+
+      const meeting = formatMeeting(rows[0])
+      const difyRes = await fetch(`${ragApiUrl}/workflows/run`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${ragApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: { id: String(meetingId), gubun: 'D', document_id: ragRow.document_id, title: meeting.title, test: JSON.stringify(meeting) },
+          response_mode: 'blocking',
+          user: 'rag-agent',
+        }),
+      })
+
+      const body = await difyRes.json().catch(() => ({}))
+      if (!difyRes.ok || body?.data?.status === 'failed') {
+        const errMsg = body?.data?.error || body?.message || 'Dify 삭제 실패'
+        console.error(`[Dify RAG 삭제] 실패 — meeting_id: ${meetingId}:`, errMsg)
+        return res.status(500).json({ success: false, error: `RAG 삭제 실패: ${errMsg}` })
+      }
+      console.log(`[Dify RAG 삭제] 성공 — meeting_id: ${meetingId}, document_id: ${ragRow.document_id}`)
+    }
+
+    // meeting_rag_docs는 CASCADE로 자동 삭제됨
+    await query('DELETE FROM meetings WHERE id = ?', [meetingId])
+    console.log(`[회의 삭제] ID: ${meetingId} - ${rows[0].title}`)
     res.json({ success: true, data: formatMeeting(rows[0]) })
   } catch (err) {
     console.error('[회의 삭제 에러]', err.message)
@@ -596,6 +631,71 @@ router.post('/:id/send-email', async (req, res) => {
   } catch (err) {
     console.error('[메일 발송 에러]', err.message)
     res.status(500).json({ success: false, error: '메일 발송 실패: ' + err.message })
+  }
+})
+
+// ── [임시] RAG 수동 생성 — 기존 회의록 document_id 채우기용, 작업 완료 후 삭제 예정 ──
+router.post('/:id/generate-rag', async (req, res) => {
+  try {
+    const rows = await query('SELECT * FROM meetings WHERE id = ?', [req.params.id])
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: '회의를 찾을 수 없습니다.' })
+    }
+
+    const ragApiKey = process.env.DIFY_RAG_AGENT_API_KEY
+    const ragApiUrl = process.env.DIFY_API_URL
+    if (!ragApiKey || !ragApiUrl) {
+      return res.status(500).json({ success: false, error: 'Dify 환경변수가 설정되지 않았습니다.' })
+    }
+
+    const meetingId = parseInt(req.params.id, 10)
+    const meeting = formatMeeting(rows[0])
+
+    const [ragRow] = await query('SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?', [meetingId])
+    const existingDocumentId = ragRow?.document_id || null
+    const gubun = ragRow ? 'U' : 'C'
+
+    await query(
+      `INSERT INTO meeting_rag_docs (meeting_id, status) VALUES (?, 'pending')
+       ON DUPLICATE KEY UPDATE status = 'pending', document_id = NULL, error_msg = NULL`,
+      [meetingId]
+    )
+
+    const difyRes = await fetch(`${ragApiUrl}/workflows/run`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ragApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs: { id: String(meetingId), gubun, document_id: existingDocumentId || '', title: meeting.title, test: JSON.stringify(meeting) },
+        response_mode: 'blocking',
+        user: 'rag-agent',
+      }),
+    })
+
+    const body = await difyRes.json().catch(() => ({}))
+    const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
+
+    if (documentId) {
+      await query(
+        "UPDATE meeting_rag_docs SET document_id = ?, status = 'completed', error_msg = NULL WHERE meeting_id = ?",
+        [documentId, meetingId]
+      )
+      console.log(`[Dify RAG 수동] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
+      res.json({ success: true, data: { documentId } })
+    } else {
+      const errMsg = body?.message || body?.data?.error || 'document_id 없음'
+      await query(
+        "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
+        [errMsg, meetingId]
+      )
+      console.error(`[Dify RAG 수동] 실패 — meeting_id: ${meetingId}:`, errMsg)
+      res.status(500).json({ success: false, error: `RAG 생성 실패: ${errMsg}` })
+    }
+  } catch (err) {
+    console.error('[RAG 수동 생성 에러]', err.message)
+    res.status(500).json({ success: false, error: 'RAG 생성 실패: ' + err.message })
   }
 })
 

@@ -511,3 +511,18 @@ export async function chatWithSearch(question, history = []) {
   if (!res.ok) throw new Error(data.error || '검색 챗봇 질문 실패')
   return data
 }
+
+export async function deleteMeeting(id) {
+  const res = await fetch(`${API_BASE}/meetings/${id}`, { method: 'DELETE' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '회의 삭제 실패')
+  return data
+}
+
+// [임시] 기존 회의록 RAG document_id 채우기용 — 작업 완료 후 삭제 예정
+export async function generateMeetingRag(id) {
+  const res = await fetch(`${API_BASE}/meetings/${id}/generate-rag`, { method: 'POST' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'RAG 생성 실패')
+  return data
+}

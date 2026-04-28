@@ -478,8 +478,10 @@ DELETE /api/meetings/:id (삭제)
 | Dify 응답 파싱 | **완료** | `outputs.body` JSON 파싱 → `document.id` 추출 |
 | 회의 상세 삭제 버튼 | **완료** | 확인 모달 포함, Dify 실패 시 삭제 차단 |
 | 기존 회의록 RAG 수동 생성 (임시) | **완료** | `POST /api/meetings/:id/generate-rag` — 작업 완료 후 삭제 예정 |
+| Dify inputs title 필드 분리 | **완료** | meetings.title 컬럼값을 `test` JSON과 별도로 `title` 필드로 전송 |
 | 서버 배포 | **미완료** | 로컬 구현 완료, rsync → deploy.sh 예정 |
 | Dify 워크플로우 C/U/D 분기 처리 | **미완료** | Dify 에이전트 쪽 gubun 분기 구현 필요 |
+| Dify 모델 컨텍스트 확장 | **미완료** | 현재 모델 8192 토큰 한계 — 더 큰 컨텍스트 모델로 교체 필요 |
 
 ### 에이전트 inputs 구조
 
@@ -488,12 +490,14 @@ DELETE /api/meetings/:id (삭제)
   "id": "123",
   "gubun": "C",
   "document_id": "",
+  "title": "회의 제목",
   "test": "{\"id\":123,\"title\":\"...\",\"date\":\"...\", ... }"
 }
 ```
 
 - `gubun`: `'C'` = 생성(Create), `'U'` = 수정(Update), `'D'` = 삭제(Delete)
 - `document_id`: 수정/삭제 시 기존 Dify 도큐먼트 ID (신규 생성 시 빈 문자열)
+- `title`: meetings 테이블의 `title` 컬럼값 (별도 필드로 분리)
 - `test`: `formatMeeting()` 결과를 JSON 직렬화한 문자열 (Dify 워크플로우 입력 폼 변수명)
 
 ### 환경 변수

@@ -425,7 +425,7 @@ POST /api/meetings (신규 생성)
         ▼
   Dify Workflow API 비동기 호출
   POST {DIFY_API_URL}/workflows/run
-  inputs: { id, gubun: 'C', meetings_note }
+  inputs: { id, gubun: 'C', document_id: '', title, test }
         │
         ├─ 성공 → outputs.body 파싱 → document.id 추출
         │         meeting_rag_docs UPDATE { document_id, status: 'completed' }
@@ -438,15 +438,15 @@ PUT /api/meetings/:id (수정)
   MySQL meetings 업데이트
         │
         ▼
-  meeting_rag_docs UPSERT { status: 'pending', document_id: NULL }
+  기존 document_id 조회 (meeting_rag_docs) ← UPSERT 전에 먼저 조회
         │
         ▼
-  기존 document_id 조회 (meeting_rag_docs)
+  meeting_rag_docs UPSERT { status: 'pending', document_id: NULL }
         │
         ▼
   Dify Workflow API 비동기 호출
   POST {DIFY_API_URL}/workflows/run
-  inputs: { id, gubun: 'U', document_id: <기존값 or ''>, meetings_note }
+  inputs: { id, gubun: existingDocumentId ? 'U' : 'C', document_id: <기존값 or ''>, title, test }
         │
         ├─ 성공 → document_id 수신
         │         meeting_rag_docs UPDATE { document_id, status: 'completed' }
@@ -472,14 +472,14 @@ DELETE /api/meetings/:id (삭제)
 |------|------|------|
 | meeting_rag_docs 매핑 테이블 생성 | **완료** | NAS MySQL에 테이블 생성 완료 |
 | meeting_rag_docs 매핑 테이블 생성 | **완료** | NAS MySQL에 테이블 생성 완료 (ON DELETE CASCADE) |
-| 신규 회의 저장 시 RAG 에이전트 호출 | **완료** | Dify Workflow API 비동기 호출 (gubun: 'C') |
-| 회의 수정 시 RAG 에이전트 재호출 | **완료** | 기존 document_id 포함하여 호출 (gubun: 'U') |
+| 신규 회의 저장 시 RAG 에이전트 호출 | **완료** | Dify Workflow API 비동기 호출 (gubun: 'C', document_id: '' 필수 포함) |
+| 회의 수정 시 RAG 에이전트 재호출 | **완료** | SELECT → UPSERT 순서 보장, existingDocumentId 없으면 gubun: 'C' 자동 전환 |
 | 회의 삭제 시 RAG 에이전트 삭제 호출 | **완료** | Dify 동기 호출 성공 후 meetings 삭제 (gubun: 'D') |
 | Dify 응답 파싱 | **완료** | `outputs.body` JSON 파싱 → `document.id` 추출 |
 | 회의 상세 삭제 버튼 | **완료** | 확인 모달 포함, Dify 실패 시 삭제 차단 |
 | 기존 회의록 RAG 수동 생성 (임시) | **완료** | `POST /api/meetings/:id/generate-rag` — 작업 완료 후 삭제 예정 |
 | Dify inputs title 필드 분리 | **완료** | meetings.title 컬럼값을 `test` JSON과 별도로 `title` 필드로 전송 |
-| 서버 배포 | **미완료** | 로컬 구현 완료, rsync → deploy.sh 예정 |
+| 서버 배포 | **완료** | .env 포함 서버 업로드, docker compose restart 완료 |
 | Dify 워크플로우 C/U/D 분기 처리 | **미완료** | Dify 에이전트 쪽 gubun 분기 구현 필요 |
 | Dify 모델 컨텍스트 확장 | **미완료** | 현재 모델 8192 토큰 한계 — 더 큰 컨텍스트 모델로 교체 필요 |
 

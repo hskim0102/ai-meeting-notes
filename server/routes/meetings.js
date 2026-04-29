@@ -307,7 +307,7 @@ router.post('/', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: 'C', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
+          inputs: { id: String(meetingId), gubun: 'C', document_id: '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
           response_mode: 'blocking',
           user: 'rag-agent',
         }),
@@ -388,14 +388,14 @@ router.put('/:id', async (req, res) => {
     const ragApiUrl = process.env.DIFY_API_URL
     if (ragApiKey && ragApiUrl) {
       const meetingId = parseInt(req.params.id, 10)
+      const [ragRow] = await query('SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?', [meetingId])
+      const existingDocumentId = ragRow?.document_id || null
+
       await query(
         `INSERT INTO meeting_rag_docs (meeting_id, status) VALUES (?, 'pending')
          ON DUPLICATE KEY UPDATE status = 'pending', document_id = NULL, error_msg = NULL`,
         [meetingId]
       )
-
-      const [ragRow] = await query('SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?', [meetingId])
-      const existingDocumentId = ragRow?.document_id || null
 
       const meetingPayload = formatMeeting(updated)
       fetch(`${ragApiUrl}/workflows/run`, {
@@ -405,13 +405,14 @@ router.put('/:id', async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: 'U', document_id: existingDocumentId || '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
+          inputs: { id: String(meetingId), gubun: existingDocumentId ? 'U' : 'C', document_id: existingDocumentId || '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
           response_mode: 'blocking',
           user: 'rag-agent',
         }),
       })
         .then(async r => {
           const body = await r.json().catch(() => ({}))
+          console.log(`[Dify RAG 응답] meeting_id: ${meetingId}`, JSON.stringify(body?.data?.outputs))
           const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
           await query(
             'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',

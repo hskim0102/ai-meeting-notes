@@ -654,7 +654,7 @@ router.post('/:id/generate-rag', async (req, res) => {
 
     const [ragRow] = await query('SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?', [meetingId])
     const existingDocumentId = ragRow?.document_id || null
-    const gubun = ragRow ? 'U' : 'C'
+    const gubun = existingDocumentId ? 'U' : 'C'
 
     await query(
       `INSERT INTO meeting_rag_docs (meeting_id, status) VALUES (?, 'pending')

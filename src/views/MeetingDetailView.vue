@@ -264,6 +264,48 @@ const maskDialog = reactive({
   pendingAction: null,   // 'download' | 'email'
 })
 
+// ── 발화 내용 마스킹 토글 ──
+const transcriptMaskMode = ref(false)
+const maskedTranscriptData = ref(null)   // 캐시 (한 번만 fetch)
+const transcriptMaskLoading = ref(false)
+
+const displayTranscript = computed(() => {
+  if (transcriptMaskMode.value && maskedTranscriptData.value) {
+    return maskedTranscriptData.value
+  }
+  return meeting.value?.transcript || []
+})
+
+async function toggleTranscriptMask() {
+  // 마스킹 모드 → 원본으로 복원
+  if (transcriptMaskMode.value) {
+    transcriptMaskMode.value = false
+    return
+  }
+  // 이미 캐시된 데이터가 있으면 바로 전환
+  if (maskedTranscriptData.value) {
+    transcriptMaskMode.value = true
+    return
+  }
+  transcriptMaskLoading.value = true
+  try {
+    const res = await fetchMaskedStatus(meeting.value.id)
+    const status = res.data.maskStatus
+    if (status === 'completed') {
+      maskedTranscriptData.value = res.data.transcript || []
+      transcriptMaskMode.value = true
+    } else if (status === 'pending') {
+      showToast('마스킹 처리 중입니다. 완료 후 이용 가능합니다.', 'warning')
+    } else {
+      showToast('마스킹 처리에 실패하여 제공이 불가합니다.', 'error')
+    }
+  } catch {
+    showToast('마스킹 상태 조회 실패', 'error')
+  } finally {
+    transcriptMaskLoading.value = false
+  }
+}
+
 // 마스킹 상태를 확인하고 다이얼로그를 표시
 async function checkMaskAndShow(action) {
   try {
@@ -709,10 +751,36 @@ const sentimentColor = computed(() => {
     <div class="flex flex-col lg:flex-row gap-6">
 
       <!-- ===== Left Column: Transcript (60%) ===== -->
-      <div v-if="hasTranscript" class="w-full lg:w-[60%] space-y-6">
+      <div v-if="hasTranscript" class="w-full lg:w-[60%] space-y-4">
+        <!-- 발화 내용 헤더 + 마스킹 토글 -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">발화 내용</h2>
+            <span
+              v-if="transcriptMaskMode"
+              class="text-xs px-2 py-0.5 rounded-full font-medium"
+              :class="isDark ? 'bg-primary-900/30 text-primary-400' : 'bg-primary-50 text-primary-600'"
+            >
+              마스킹 적용 중
+            </span>
+          </div>
+          <button
+            @click="toggleTranscriptMask"
+            :disabled="transcriptMaskLoading"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-50"
+            :class="transcriptMaskMode
+              ? (isDark ? 'border-primary-500 text-primary-400 bg-primary-900/20 hover:bg-primary-900/40' : 'border-primary-300 text-primary-600 bg-primary-50 hover:bg-primary-100')
+              : (isDark ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+            {{ transcriptMaskLoading ? '로딩 중...' : (transcriptMaskMode ? '원본 보기' : '마스킹 보기') }}
+          </button>
+        </div>
         <!-- 화자 분리 타임라인 -->
         <SpeakerTimeline
-          :transcript="meeting.transcript"
+          :transcript="displayTranscript"
           :speaker-map="speakerMap"
           :audio-src="audioSrc"
           @edit-speaker="openSpeakerEdit"

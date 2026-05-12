@@ -8,6 +8,7 @@
 import { Router } from 'express'
 import nodemailer from 'nodemailer'
 import { query } from '../services/database.js'
+import { maskPersonalInfo } from '../services/difyService.js'
 import { optionalAuth } from '../middleware/authMiddleware.js'
 
 const router = Router()
@@ -23,6 +24,47 @@ function canAccessMeeting(user, participants) {
   // member는 자신이 참석자인 회의만 접근 가능
   const list = Array.isArray(participants) ? participants : []
   return list.includes(user.name)
+}
+
+// ── 헬퍼: 개인정보 마스킹 비동기 트리거 ──
+// 회의 저장/수정 후 fire-and-forget 방식으로 호출.
+// Dify API 오류(HTTP, 타임아웃, 워크플로우 실패)만 failed로 기록.
+// Dify가 정상 응답했으나 마스킹 내용이 없는 경우는 completed로 처리.
+async function triggerMaskingAsync(meetingId, content) {
+  if (!content.aiSummary) return   // AI 요약 없으면 마스킹 불필요
+
+  // pending 상태로 upsert (이미 있으면 재처리 상태로 초기화)
+  await query(
+    `INSERT INTO meeting_masked_contents (meeting_id, mask_status)
+     VALUES (?, 'pending')
+     ON DUPLICATE KEY UPDATE mask_status = 'pending', error_msg = NULL`,
+    [meetingId]
+  ).catch(err => console.error(`[Dify Mask] pending 등록 실패 — meeting_id: ${meetingId}:`, err.message))
+
+  maskPersonalInfo(content)
+    .then(async masked => {
+      await query(
+        `UPDATE meeting_masked_contents
+         SET ai_summary = ?, key_decisions = ?, action_items = ?, transcript = ?,
+             mask_status = 'completed', error_msg = NULL
+         WHERE meeting_id = ?`,
+        [
+          masked.aiSummary || '',
+          JSON.stringify(masked.keyDecisions || []),
+          JSON.stringify(masked.actionItems  || []),
+          JSON.stringify(masked.transcript   || []),
+          meetingId,
+        ]
+      )
+      console.log(`[Dify Mask] 완료 — meeting_id: ${meetingId}`)
+    })
+    .catch(async err => {
+      await query(
+        `UPDATE meeting_masked_contents SET mask_status = 'failed', error_msg = ? WHERE meeting_id = ?`,
+        [err.message, meetingId]
+      )
+      console.error(`[Dify Mask] 실패 — meeting_id: ${meetingId}:`, err.message)
+    })
 }
 
 // ── 헬퍼: DB 행 → API 응답 형식 변환 ──
@@ -264,6 +306,48 @@ router.get('/:id/recording', async (req, res) => {
   }
 })
 
+// ── 마스킹 컨텐츠 조회 ──
+// GET /:id 보다 먼저 등록해야 라우팅 충돌 없음
+router.get('/:id/masked', async (req, res) => {
+  try {
+    const rows = await query(
+      'SELECT * FROM meeting_masked_contents WHERE meeting_id = ?',
+      [req.params.id]
+    )
+
+    // 레코드 없음 → 아직 pending 처리로 간주
+    if (rows.length === 0) {
+      return res.json({ success: true, data: { maskStatus: 'pending' } })
+    }
+
+    const row = rows[0]
+
+    // 처리 완료가 아닌 경우 상태만 반환
+    if (row.mask_status !== 'completed') {
+      return res.json({ success: true, data: { maskStatus: row.mask_status } })
+    }
+
+    const parseJsonField = (val) => {
+      if (typeof val === 'string') { try { return JSON.parse(val) } catch { return [] } }
+      return val || []
+    }
+
+    res.json({
+      success: true,
+      data: {
+        maskStatus:   'completed',
+        aiSummary:    row.ai_summary || '',
+        keyDecisions: parseJsonField(row.key_decisions),
+        actionItems:  parseJsonField(row.action_items),
+        transcript:   parseJsonField(row.transcript),
+      },
+    })
+  } catch (err) {
+    console.error('[마스킹 조회 에러]', err.message)
+    res.status(500).json({ success: false, error: '마스킹 조회 실패' })
+  }
+})
+
 // ── 회의 상세 조회 ──
 router.get('/:id', async (req, res) => {
   try {
@@ -365,6 +449,15 @@ router.post('/', async (req, res) => {
         })
     }
 
+    // ── 개인정보 마스킹 비동기 트리거 ──
+    const meetingPayloadForMask = formatMeeting(newMeeting)
+    triggerMaskingAsync(result.insertId, {
+      aiSummary:    meetingPayloadForMask.aiSummary,
+      keyDecisions: meetingPayloadForMask.keyDecisions,
+      actionItems:  meetingPayloadForMask.actionItems,
+      transcript:   meetingPayloadForMask.transcript,
+    })
+
     res.status(201).json({ success: true, data: formatMeeting(newMeeting) })
   } catch (err) {
     console.error('[회의 생성 에러]', err.message)
@@ -464,6 +557,15 @@ router.put('/:id', async (req, res) => {
         })
     }
 
+    // ── 개인정보 마스킹 비동기 트리거 ──
+    const updatedPayload = formatMeeting(updated)
+    triggerMaskingAsync(parseInt(req.params.id, 10), {
+      aiSummary:    updatedPayload.aiSummary,
+      keyDecisions: updatedPayload.keyDecisions,
+      actionItems:  updatedPayload.actionItems,
+      transcript:   updatedPayload.transcript,
+    })
+
     res.json({ success: true, data: formatMeeting(updated) })
   } catch (err) {
     console.error('[회의 수정 에러]', err.message)
@@ -558,8 +660,28 @@ router.post('/:id/send-email', async (req, res) => {
       return res.status(404).json({ success: false, error: '회의를 찾을 수 없습니다.' })
     }
 
-    const meeting = formatMeeting(rows[0])
-    const { recipients = [], additionalRecipients = [], subject } = req.body
+    let meeting = formatMeeting(rows[0])
+    const { recipients = [], additionalRecipients = [], subject, useMasking = false } = req.body
+
+    // 마스킹 컨텐츠 사용 요청 시 → meeting_masked_contents 에서 completed 레코드 적용
+    if (useMasking) {
+      const [maskedRow] = await query(
+        `SELECT * FROM meeting_masked_contents WHERE meeting_id = ? AND mask_status = 'completed'`,
+        [req.params.id]
+      )
+      if (maskedRow) {
+        const parseJsonField = (val) => {
+          if (typeof val === 'string') { try { return JSON.parse(val) } catch { return [] } }
+          return val || []
+        }
+        meeting = {
+          ...meeting,
+          aiSummary:    maskedRow.ai_summary    || meeting.aiSummary,
+          keyDecisions: parseJsonField(maskedRow.key_decisions) || meeting.keyDecisions,
+          actionItems:  parseJsonField(maskedRow.action_items)  || meeting.actionItems,
+        }
+      }
+    }
 
     // 수신자 목록 합치기
     const allRecipients = [...recipients, ...additionalRecipients].filter(Boolean)

@@ -203,7 +203,8 @@ export async function updateSpeakerMap(id, speakerMap) {
 /**
  * 회의록 메일 발송
  * @param {number|string} id - 회의 ID
- * @param {object} payload - { recipients: [...], additionalRecipients: [...], subject: string }
+ * @param {object} payload - { recipients, additionalRecipients, subject, useMasking?: boolean }
+ *   useMasking: true 이면 서버에서 마스킹된 컨텐츠로 메일 본문 생성
  */
 export async function sendMeetingEmail(id, payload) {
   const res = await fetch(`${API_BASE}/meetings/${id}/send-email`, {
@@ -213,6 +214,18 @@ export async function sendMeetingEmail(id, payload) {
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '메일 발송 실패')
+  return data
+}
+
+/**
+ * 회의 마스킹 상태 및 마스킹 컨텐츠 조회
+ * @param {number|string} id - 회의 ID
+ * @returns {Promise<{ maskStatus: 'pending'|'completed'|'failed', aiSummary?, keyDecisions?, actionItems?, transcript? }>}
+ */
+export async function fetchMaskedStatus(id) {
+  const res = await fetch(`${API_BASE}/meetings/${id}/masked`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '마스킹 상태 조회 실패')
   return data
 }
 

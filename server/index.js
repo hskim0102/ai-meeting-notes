@@ -27,6 +27,7 @@ import chatRouter from './routes/chat.js'
 import keywordsRouter from './routes/keywords.js'
 import chatBotRouter from './routes/chatBot.js'
 import authRouter from './routes/auth.js'
+import maskRouter from './routes/mask.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -105,6 +106,9 @@ app.use('/api/keywords', keywordsRouter)
 
 // Dify 챗봇 / 지식 베이스 엔드포인트
 app.use('/api/chatBot', chatBotRouter)
+
+// 개인정보 마스킹 상태 확인 엔드포인트
+app.use('/api/mask', maskRouter)
 
 // 기본 루트 - 서버 상태 확인
 app.get('/api', (req, res) => {

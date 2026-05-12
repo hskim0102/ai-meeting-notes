@@ -319,3 +319,137 @@ function tryParseJSON(value) {
     return value
   }
 }
+
+// ─────────────────────────────────────────────────
+// 개인정보 마스킹
+// ─────────────────────────────────────────────────
+
+/**
+ * Dify 워크플로우 API를 호출하여 회의 내용의 개인정보를 마스킹 처리
+ *
+ * failed 판단 기준: Dify API 호출 자체 실패(HTTP 오류, 타임아웃, 워크플로우 status:failed)만 해당.
+ * Dify가 정상 응답했으나 마스킹할 개인정보가 없어 원본과 동일한 내용 반환 → completed (정상).
+ *
+ * @param {object} content - { aiSummary, keyDecisions, actionItems, transcript }
+ * @returns {Promise<object>} - 마스킹 처리된 동일 구조 객체
+ * @throws {Error} - API 키 미설정 / 타임아웃 / HTTP 오류 / 워크플로우 실패 시
+ */
+export async function maskPersonalInfo(content) {
+  const apiKey = process.env.DIFY_MASK_API_KEY
+  const apiUrl = process.env.DIFY_API_URL
+
+  if (!apiKey) throw new Error('DIFY_MASK_API_KEY 환경 변수가 설정되지 않았습니다.')
+  if (!apiUrl) throw new Error('DIFY_API_URL 환경 변수가 설정되지 않았습니다.')
+
+  const transcriptText = Array.isArray(content.transcript)
+    ? content.transcript.map(seg => `[${seg.speaker || '화자'}] ${seg.text || ''}`).join('\n')
+    : ''
+
+  const requestBody = JSON.stringify({
+    inputs: {
+      ai_summary:    content.aiSummary || '',
+      key_decisions: JSON.stringify(content.keyDecisions || []),
+      action_items:  JSON.stringify(content.actionItems  || []),
+      transcript:    transcriptText,
+    },
+    response_mode: 'blocking',
+    user: 'dx-member',
+  })
+
+  console.log(`[Dify Mask] 마스킹 요청 — meeting 콘텐츠 ${(content.aiSummary || '').length}자`)
+
+  const controller = new AbortController()
+  const timeoutId  = setTimeout(() => controller.abort(), DIFY_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(`${apiUrl}/workflows/run`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body:    requestBody,
+      signal:  controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '응답 본문 없음')
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Dify 마스킹 API 인증 실패. DIFY_MASK_API_KEY를 확인하세요. (HTTP ${response.status})`)
+      }
+      throw new Error(`Dify 마스킹 API 오류 (HTTP ${response.status}): ${errBody.substring(0, 200)}`)
+    }
+
+    const result = await response.json()
+
+    if (result.data?.status === 'failed') {
+      throw new Error(`Dify 마스킹 워크플로우 실행 실패: ${result.data?.error || '알 수 없는 오류'}`)
+    }
+
+    console.log(`[Dify Mask] 완료`)
+    return parseMaskOutput(result, content)
+
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error.name === 'AbortError') {
+      throw new Error(`Dify 마스킹 API 타임아웃 (${DIFY_TIMEOUT_MS / 1000}초 초과)`)
+    }
+    throw error
+  }
+}
+
+/**
+ * Dify 마스킹 응답을 파싱하여 원본 구조로 복원
+ * 파싱 실패 시 원본 데이터를 그대로 반환 (Dify 정상 응답이므로 completed 처리)
+ */
+function parseMaskOutput(difyResponse, original) {
+  const outputs = difyResponse?.data?.outputs || {}
+
+  // 전략 1: outputs.result 가 JSON 문자열인 경우 (LLM이 전체를 JSON으로 반환)
+  if (outputs.result && typeof outputs.result === 'string') {
+    try {
+      const cleaned = outputs.result
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim()
+      const parsed = JSON.parse(cleaned)
+      return {
+        aiSummary:    typeof parsed.ai_summary === 'string' && !parsed.ai_summary.includes('{{')
+                        ? parsed.ai_summary : original.aiSummary,
+        keyDecisions: Array.isArray(tryParseJSON(parsed.key_decisions))
+                        ? tryParseJSON(parsed.key_decisions) : original.keyDecisions,
+        actionItems:  Array.isArray(tryParseJSON(parsed.action_items))
+                        ? tryParseJSON(parsed.action_items) : original.actionItems,
+        transcript:   parsed.transcript && !parsed.transcript.includes('{{')
+                        ? parseMaskedTranscript(parsed.transcript, original.transcript)
+                        : original.transcript,
+      }
+    } catch {
+      return { ...original }
+    }
+  }
+
+  // 전략 2: outputs 에 개별 필드가 있는 경우
+  return {
+    aiSummary:    typeof outputs.ai_summary === 'string' && !outputs.ai_summary.includes('{{')
+                    ? outputs.ai_summary : original.aiSummary,
+    keyDecisions: Array.isArray(tryParseJSON(outputs.key_decisions))
+                    ? tryParseJSON(outputs.key_decisions) : original.keyDecisions,
+    actionItems:  Array.isArray(tryParseJSON(outputs.action_items))
+                    ? tryParseJSON(outputs.action_items) : original.actionItems,
+    transcript:   outputs.transcript && !outputs.transcript.includes('{{')
+                    ? parseMaskedTranscript(outputs.transcript, original.transcript)
+                    : original.transcript,
+  }
+}
+
+/**
+ * 마스킹된 transcript 텍스트("[화자] 텍스트" 형식)를 원본 segments 구조로 복원
+ */
+function parseMaskedTranscript(maskedText, originalSegments) {
+  if (!Array.isArray(originalSegments)) return originalSegments
+  const lines = maskedText.split('\n').filter(l => l.trim())
+  return originalSegments.map((seg, i) => ({
+    ...seg,
+    text: lines[i] ? lines[i].replace(/^\[[^\]]+\]\s*/, '') : seg.text,
+  }))
+}

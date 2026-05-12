@@ -9,7 +9,7 @@ import SkeletonLoader from '../components/SkeletonLoader.vue'
 import MeetingChatbot from '../components/MeetingChatbot.vue'
 import SpeakerTimeline from '../components/SpeakerTimeline.vue'
 import CollaborationIndicator from '../components/CollaborationIndicator.vue'
-import { fetchMeeting, updateMeeting, deleteMeeting, sendMeetingEmail, updateSpeakerMap, fetchMeetingRecording, getRecordingFileUrl, generateMeetingRag } from '../services/api.js'
+import { fetchMeeting, updateMeeting, deleteMeeting, sendMeetingEmail, updateSpeakerMap, fetchMeetingRecording, getRecordingFileUrl, generateMeetingRag, fetchMaskedStatus } from '../services/api.js'
 import { meetings as fallbackMeetings } from '../data/mockData.js'
 
 const { isDark } = useDarkMode()
@@ -77,7 +77,8 @@ const emailForm = reactive({
   subject: '',
   recipients: [],       // { name, email, checked }
   additionalEmail: '',
-  additionalList: [],    // 추가 입력한 이메일
+  additionalList: [],   // 추가 입력한 이메일
+  useMasking: false,    // 마스킹 컨텐츠 사용 여부
 })
 
 onMounted(async () => {
@@ -255,8 +256,56 @@ function removeActionItem(idx) {
 // ── 토글 (뷰 모드) ──
 const toggleItem = (item) => { item.done = !item.done }
 
+// ── 마스킹 선택 다이얼로그 상태 ──
+const maskDialog = reactive({
+  show:          false,
+  status:        null,   // 'completed' | 'pending' | 'failed'
+  maskedData:    null,   // status === 'completed' 일 때 마스킹 데이터
+  pendingAction: null,   // 'download' | 'email'
+})
+
+// 마스킹 상태를 확인하고 다이얼로그를 표시
+async function checkMaskAndShow(action) {
+  try {
+    const res = await fetchMaskedStatus(meeting.value.id)
+    maskDialog.status        = res.data.maskStatus
+    maskDialog.maskedData    = res.data.maskStatus === 'completed' ? res.data : null
+    maskDialog.pendingAction = action
+    maskDialog.show          = true
+  } catch {
+    showToast('마스킹 상태 조회 실패', 'error')
+  }
+}
+
+// 다이얼로그에서 선택 확정 (completed 상태에서만 호출됨)
+function confirmMaskChoice(useMasking) {
+  const action = maskDialog.pendingAction
+  const masked = maskDialog.maskedData
+  maskDialog.show = false
+
+  if (action === 'download') {
+    const dataToExport = useMasking
+      ? { ...meeting.value, ...masked }
+      : meeting.value
+    try {
+      exportMeetingToWord(dataToExport)
+      showToast('Word 문서를 다운로드했습니다.', 'success')
+    } catch (err) {
+      console.error('[Word 다운로드 오류]', err)
+      showToast(`다운로드 실패: ${err.message}`, 'error')
+    }
+  } else if (action === 'email') {
+    emailForm.useMasking = useMasking
+    openEmailModalDirect()
+  }
+}
+
 // ── 메일 발송 모달 열기 ──
 function openEmailModal() {
+  checkMaskAndShow('email')
+}
+
+function openEmailModalDirect() {
   const m = meeting.value
   emailForm.subject = `[회의록] ${m.title} - ${m.date}`
   emailForm.recipients = (m.participants || []).map(name => ({
@@ -291,7 +340,8 @@ async function submitEmail() {
     const res = await sendMeetingEmail(meeting.value.id, {
       recipients,
       additionalRecipients,
-      subject: emailForm.subject,
+      subject:    emailForm.subject,
+      useMasking: emailForm.useMasking,
     })
 
     showEmailModal.value = false
@@ -314,17 +364,10 @@ function showToast(message, type = 'success') {
 }
 
 // ── Word(.doc) 다운로드 ──
-// 회의 데이터(메타 + AI 요약 마크다운 + 결정사항 + 액션아이템) 를 Word 호환
-// HTML 로 변환하여 파일 다운로드 트리거
+// 마스킹 상태를 먼저 확인하고 다이얼로그를 통해 마스킹/원본 선택 후 다운로드
 function downloadWord() {
   if (!meeting.value) return
-  try {
-    exportMeetingToWord(meeting.value)
-    showToast('Word 문서를 다운로드했습니다.', 'success')
-  } catch (err) {
-    console.error('[Word 다운로드 오류]', err)
-    showToast(`다운로드 실패: ${err.message}`, 'error')
-  }
+  checkMaskAndShow('download')
 }
 
 const formatDuration = (min) => {
@@ -345,6 +388,84 @@ const sentimentColor = computed(() => {
 </script>
 
 <template>
+  <!-- ── 마스킹 선택 다이얼로그 ── -->
+  <Teleport to="body">
+    <div v-if="maskDialog.show" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="maskDialog.show = false"></div>
+      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+
+        <!-- completed: 마스킹/원본 선택 -->
+        <template v-if="maskDialog.status === 'completed'">
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-primary-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+            <h3 class="text-base font-semibold text-slate-900">개인정보 마스킹</h3>
+          </div>
+          <p class="text-sm text-slate-600 mb-6">
+            {{ maskDialog.pendingAction === 'download' ? '다운로드할' : '발송할' }}
+            문서의 개인(신용)정보 마스킹 처리 여부를 선택하세요.
+          </p>
+          <div class="flex flex-col gap-2">
+            <button
+              @click="confirmMaskChoice(true)"
+              class="w-full px-4 py-2.5 text-sm font-medium bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              마스킹 처리된 문서
+            </button>
+            <button
+              @click="confirmMaskChoice(false)"
+              class="w-full px-4 py-2.5 text-sm font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              원본 문서
+            </button>
+          </div>
+        </template>
+
+        <!-- pending: 처리 중 안내 -->
+        <template v-else-if="maskDialog.status === 'pending'">
+          <div class="flex items-center gap-2 mb-3">
+            <svg class="w-5 h-5 text-yellow-500 shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            <h3 class="text-base font-semibold text-slate-900">마스킹 처리 중</h3>
+          </div>
+          <p class="text-sm text-slate-600 mb-5">
+            개인(신용)정보 마스킹이 처리 중입니다.<br>
+            완료 후 이용 가능합니다.
+          </p>
+          <button
+            @click="maskDialog.show = false"
+            class="w-full px-4 py-2.5 text-sm font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            확인
+          </button>
+        </template>
+
+        <!-- failed: 처리 실패 안내 -->
+        <template v-else>
+          <div class="flex items-center gap-2 mb-3">
+            <svg class="w-5 h-5 text-danger-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <h3 class="text-base font-semibold text-slate-900">마스킹 처리 실패</h3>
+          </div>
+          <p class="text-sm text-slate-600 mb-5">
+            개인(신용)정보 마스킹 처리에 실패하여 제공이 불가합니다.
+          </p>
+          <button
+            @click="maskDialog.show = false"
+            class="w-full px-4 py-2.5 text-sm font-medium border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            확인
+          </button>
+        </template>
+
+      </div>
+    </div>
+  </Teleport>
+
   <!-- 토스트 알림 -->
   <Teleport to="body">
     <Transition name="toast">

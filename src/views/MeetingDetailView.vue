@@ -19,6 +19,7 @@ const router = useRouter()
 const activeTab = ref('summary')
 const meetingData = ref(null)
 const loading = ref(true)
+const accessDenied = ref(false)
 const audioSrc = ref('')
 
 // ── 편집 모드 상태 ──
@@ -91,8 +92,12 @@ onMounted(async () => {
       }
     }
   } catch (err) {
-    console.warn('[회의 상세] DB 조회 실패, Mock 데이터 사용:', err.message)
-    meetingData.value = fallbackMeetings.find(m => m.id === Number(route.params.id)) || null
+    if (err.status === 403) {
+      accessDenied.value = true
+    } else {
+      console.warn('[회의 상세] DB 조회 실패, Mock 데이터 사용:', err.message)
+      meetingData.value = fallbackMeetings.find(m => m.id === Number(route.params.id)) || null
+    }
   } finally {
     loading.value = false
   }
@@ -359,8 +364,28 @@ const sentimentColor = computed(() => {
     </Transition>
   </Teleport>
 
+  <!-- 접근 권한 없음 -->
+  <div v-if="accessDenied" class="p-8 flex flex-col items-center justify-center min-h-[60vh] gap-4">
+    <div class="w-16 h-16 rounded-full flex items-center justify-center" :class="isDark ? 'bg-danger-500/20' : 'bg-danger-50'">
+      <svg class="w-8 h-8 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+      </svg>
+    </div>
+    <h2 class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">접근 권한이 없습니다</h2>
+    <p class="text-sm text-center" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+      이 회의에 참석한 멤버만 내용을 확인할 수 있습니다.
+    </p>
+    <button
+      @click="router.push('/meetings')"
+      class="px-4 py-2 rounded-lg text-sm font-medium"
+      :class="isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'"
+    >
+      회의 목록으로
+    </button>
+  </div>
+
   <!-- 로딩 중 스켈레톤 -->
-  <div v-if="loading" class="p-8">
+  <div v-else-if="loading" class="p-8">
     <div class="mb-8">
       <SkeletonLoader type="card" :count="1" />
     </div>

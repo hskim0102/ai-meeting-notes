@@ -8,8 +8,22 @@
 import { Router } from 'express'
 import nodemailer from 'nodemailer'
 import { query } from '../services/database.js'
+import { optionalAuth } from '../middleware/authMiddleware.js'
 
 const router = Router()
+
+// 모든 회의 라우트에 선택적 인증 적용
+router.use(optionalAuth)
+
+// 참석자 접근 권한 확인 헬퍼
+function canAccessMeeting(user, participants) {
+  if (!user) return false
+  // admin, manager는 모든 회의 접근 가능
+  if (user.role === 'admin' || user.role === 'manager') return true
+  // member는 자신이 참석자인 회의만 접근 가능
+  const list = Array.isArray(participants) ? participants : []
+  return list.includes(user.name)
+}
 
 // ── 헬퍼: DB 행 → API 응답 형식 변환 ──
 function formatMeeting(row) {
@@ -46,10 +60,23 @@ function formatMeeting(row) {
 router.get('/', async (req, res) => {
   try {
     const { status, page, limit } = req.query
+    const user = req.user
+
     let sql = 'SELECT * FROM meetings'
     const params = []
+    const conditions = []
 
-    if (status) { sql += ' WHERE status = ?'; params.push(status) }
+    if (status) { conditions.push('status = ?'); params.push(status) }
+
+    // member 권한: 자신이 참석자인 회의만 조회
+    if (user && user.role === 'member') {
+      conditions.push('JSON_CONTAINS(participants, JSON_QUOTE(?))')
+      params.push(user.name)
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ')
+    }
     sql += ' ORDER BY date DESC, time DESC'
 
     const rows = await query(sql, params)
@@ -244,7 +271,15 @@ router.get('/:id', async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, error: '회의를 찾을 수 없습니다.' })
     }
-    res.json({ success: true, data: formatMeeting(rows[0]) })
+    const meeting = formatMeeting(rows[0])
+
+    // 참석자 접근 제어: member는 본인이 참석한 회의만 열람 가능
+    const user = req.user
+    if (user && user.role === 'member' && !meeting.participants.includes(user.name)) {
+      return res.status(403).json({ success: false, error: '이 회의에 접근할 권한이 없습니다' })
+    }
+
+    res.json({ success: true, data: meeting })
   } catch (err) {
     console.error('[회의 상세 에러]', err.message)
     res.status(500).json({ success: false, error: '회의 조회 실패' })

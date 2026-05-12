@@ -6,21 +6,37 @@ import { useAuth } from '../composables/useAuth.js'
 
 const { isDark } = useDarkMode()
 const router = useRouter()
-const { login } = useAuth()
+const { register } = useAuth()
 
-const form = ref({ email: '', password: '' })
+const form = ref({
+  name: '',
+  email: '',
+  password: '',
+  passwordConfirm: '',
+  department: '',
+})
 const loading = ref(false)
 const error = ref('')
 
-async function handleLogin() {
-  if (!form.value.email || !form.value.password) {
-    error.value = '이메일과 비밀번호를 입력해주세요'
+async function handleRegister() {
+  error.value = ''
+
+  if (!form.value.name || !form.value.email || !form.value.password) {
+    error.value = '이름, 이메일, 비밀번호는 필수입니다'
     return
   }
+  if (form.value.password !== form.value.passwordConfirm) {
+    error.value = '비밀번호가 일치하지 않습니다'
+    return
+  }
+  if (form.value.password.length < 6) {
+    error.value = '비밀번호는 6자 이상이어야 합니다'
+    return
+  }
+
   loading.value = true
-  error.value = ''
   try {
-    await login(form.value.email, form.value.password)
+    await register(form.value.name, form.value.email, form.value.password, form.value.department)
     router.push('/')
   } catch (e) {
     error.value = e.message
@@ -49,7 +65,7 @@ async function handleLogin() {
       ></div>
     </div>
 
-    <!-- 로그인 카드 -->
+    <!-- 회원가입 카드 -->
     <div
       class="relative w-full max-w-md rounded-2xl border p-8 shadow-xl"
       :class="isDark
@@ -69,10 +85,10 @@ async function handleLogin() {
           </svg>
         </div>
         <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">
-          NoteFlow
+          NoteFlow 회원가입
         </h1>
         <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
-          기록에서 흐름으로, 회의가 곧 실행이 되다
+          계정을 만들어 회의록을 관리하세요
         </p>
       </div>
 
@@ -92,18 +108,39 @@ async function handleLogin() {
       >
         <div class="flex flex-col items-center gap-3">
           <div class="w-8 h-8 border-3 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p class="text-sm font-medium" :class="isDark ? 'text-slate-300' : 'text-slate-600'">로그인 중...</p>
+          <p class="text-sm font-medium" :class="isDark ? 'text-slate-300' : 'text-slate-600'">처리 중...</p>
         </div>
       </div>
 
-      <!-- 로그인 폼 -->
-      <form @submit.prevent="handleLogin" class="flex flex-col gap-4">
+      <!-- 폼 -->
+      <form @submit.prevent="handleRegister" class="flex flex-col gap-4">
+        <!-- 이름 -->
         <div>
           <label
             class="block text-xs font-semibold mb-1.5"
             :class="isDark ? 'text-slate-300' : 'text-slate-700'"
           >
-            이메일
+            이름 <span class="text-danger-500">*</span>
+          </label>
+          <input
+            v-model="form.name"
+            type="text"
+            placeholder="홍길동"
+            autocomplete="name"
+            class="w-full px-3 py-2.5 rounded-xl text-sm border transition-colors outline-none focus:ring-2 focus:ring-primary-500/30"
+            :class="isDark
+              ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:border-primary-500'
+              : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-primary-500'"
+          />
+        </div>
+
+        <!-- 이메일 -->
+        <div>
+          <label
+            class="block text-xs font-semibold mb-1.5"
+            :class="isDark ? 'text-slate-300' : 'text-slate-700'"
+          >
+            이메일 <span class="text-danger-500">*</span>
           </label>
           <input
             v-model="form.email"
@@ -117,18 +154,18 @@ async function handleLogin() {
           />
         </div>
 
+        <!-- 부서 -->
         <div>
           <label
             class="block text-xs font-semibold mb-1.5"
             :class="isDark ? 'text-slate-300' : 'text-slate-700'"
           >
-            비밀번호
+            부서 <span class="text-xs font-normal" :class="isDark ? 'text-slate-500' : 'text-slate-400'">(선택)</span>
           </label>
           <input
-            v-model="form.password"
-            type="password"
-            placeholder="비밀번호 입력"
-            autocomplete="current-password"
+            v-model="form.department"
+            type="text"
+            placeholder="개발팀, 기획팀, 마케팅팀..."
             class="w-full px-3 py-2.5 rounded-xl text-sm border transition-colors outline-none focus:ring-2 focus:ring-primary-500/30"
             :class="isDark
               ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:border-primary-500'
@@ -136,41 +173,81 @@ async function handleLogin() {
           />
         </div>
 
+        <!-- 비밀번호 -->
+        <div>
+          <label
+            class="block text-xs font-semibold mb-1.5"
+            :class="isDark ? 'text-slate-300' : 'text-slate-700'"
+          >
+            비밀번호 <span class="text-danger-500">*</span>
+          </label>
+          <input
+            v-model="form.password"
+            type="password"
+            placeholder="6자 이상"
+            autocomplete="off"
+            class="w-full px-3 py-2.5 rounded-xl text-sm border transition-colors outline-none focus:ring-2 focus:ring-primary-500/30"
+            :class="isDark
+              ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:border-primary-500'
+              : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-primary-500'"
+          />
+        </div>
+
+        <!-- 비밀번호 확인 -->
+        <div>
+          <label
+            class="block text-xs font-semibold mb-1.5"
+            :class="isDark ? 'text-slate-300' : 'text-slate-700'"
+          >
+            비밀번호 확인 <span class="text-danger-500">*</span>
+          </label>
+          <input
+            v-model="form.passwordConfirm"
+            type="password"
+            placeholder="비밀번호 재입력"
+            autocomplete="off"
+            class="w-full px-3 py-2.5 rounded-xl text-sm border transition-colors outline-none focus:ring-2 focus:ring-primary-500/30"
+            :class="[
+              isDark
+                ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:border-primary-500'
+                : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-primary-500',
+              form.passwordConfirm && form.password !== form.passwordConfirm
+                ? 'border-danger-500 focus:ring-danger-500/30'
+                : ''
+            ]"
+          />
+          <p
+            v-if="form.passwordConfirm && form.password !== form.passwordConfirm"
+            class="text-xs text-danger-500 mt-1"
+          >
+            비밀번호가 일치하지 않습니다
+          </p>
+        </div>
+
+        <!-- 가입 버튼 -->
         <button
           type="submit"
           :disabled="loading"
-          class="w-full py-3 rounded-xl text-sm font-semibold transition-all mt-1 disabled:opacity-50"
+          class="w-full py-3 rounded-xl text-sm font-semibold transition-all mt-2 disabled:opacity-50"
           :class="isDark
             ? 'bg-primary-600 hover:bg-primary-500 text-white'
             : 'bg-primary-500 hover:bg-primary-600 text-white'"
         >
-          로그인
+          회원가입
         </button>
       </form>
 
-      <!-- 회원가입 링크 -->
+      <!-- 로그인 링크 -->
       <p class="text-center text-sm mt-6" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
-        계정이 없으신가요?
+        이미 계정이 있으신가요?
         <router-link
-          to="/register"
+          to="/login"
           class="font-semibold ml-1 hover:underline"
           :class="isDark ? 'text-primary-400' : 'text-primary-600'"
         >
-          회원가입
+          로그인
         </router-link>
       </p>
-
-      <!-- 관리자 계정 안내 -->
-      <div
-        class="mt-6 p-3 rounded-xl border text-xs"
-        :class="isDark
-          ? 'bg-slate-700/50 border-slate-600 text-slate-400'
-          : 'bg-slate-50 border-slate-200 text-slate-500'"
-      >
-        <p class="font-semibold mb-1" :class="isDark ? 'text-slate-300' : 'text-slate-600'">기본 관리자 계정</p>
-        <p>이메일: admin@company.com</p>
-        <p>비밀번호: admin1234</p>
-      </div>
     </div>
   </div>
 </template>

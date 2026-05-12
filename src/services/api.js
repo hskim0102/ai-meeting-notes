@@ -2,6 +2,26 @@
 // 같은 origin 요청이므로 CORS 문제 없음
 const API_BASE = '/api'
 
+// JWT 토큰을 포함한 기본 헤더 생성
+function authHeaders(extra = {}) {
+  const token = localStorage.getItem('auth_token')
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
+  }
+}
+
+// 인증이 포함된 fetch 래퍼
+async function apiFetch(url, options = {}) {
+  const token = localStorage.getItem('auth_token')
+  const headers = {
+    ...(options.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+  return fetch(url, { ...options, headers })
+}
+
 /**
  * 오디오 파일을 서버에 업로드하고 STT 결과를 받아옴
  * @param {File} file - 오디오 파일 객체
@@ -95,7 +115,7 @@ export async function fetchMeetings(params = {}, signal) {
     if (value !== undefined && value !== '') query.set(key, value)
   }
   const opts = signal ? { signal } : {}
-  const res = await fetch(`${API_BASE}/meetings?${query}`, opts)
+  const res = await apiFetch(`${API_BASE}/meetings?${query}`, opts)
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '회의 목록 조회 실패')
   return data
@@ -105,9 +125,13 @@ export async function fetchMeetings(params = {}, signal) {
  * 회의 상세 조회 (DB)
  */
 export async function fetchMeeting(id) {
-  const res = await fetch(`${API_BASE}/meetings/${id}`)
+  const res = await apiFetch(`${API_BASE}/meetings/${id}`)
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || '회의 조회 실패')
+  if (!res.ok) {
+    const err = new Error(data.error || '회의 조회 실패')
+    err.status = res.status
+    throw err
+  }
   return data
 }
 

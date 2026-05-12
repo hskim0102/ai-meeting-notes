@@ -25,6 +25,7 @@ import RoomCalendarView from './views/RoomCalendarView.vue'
 import MeetingAnalysisView from './views/MeetingAnalysisView.vue'
 import ReportView from './views/ReportView.vue'
 import LoginView from './views/LoginView.vue'
+import RegisterView from './views/RegisterView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AuditLogView from './views/AuditLogView.vue'
 import RecordingsListView from './views/RecordingsListView.vue'
@@ -35,6 +36,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    { path: '/register', name: 'register', component: RegisterView, meta: { public: true } },
     { path: '/', name: 'dashboard', component: DashboardView },
     { path: '/meetings', name: 'meetings', component: MeetingsListView },
     { path: '/meetings/new', name: 'new-meeting', component: NewMeetingView },
@@ -58,7 +60,7 @@ router.beforeEach((to, from, next) => {
   const user = JSON.parse(localStorage.getItem('auth_user') || 'null')
   if (!to.meta.public && !user) {
     next({ name: 'login' })
-  } else if (to.name === 'login' && user) {
+  } else if ((to.name === 'login' || to.name === 'register') && user) {
     next({ name: 'dashboard' })
   } else if (to.meta.requiresAdmin && user?.role !== 'admin') {
     next({ name: 'dashboard' })

@@ -26,6 +26,7 @@ import recordingsRouter from './routes/recordings.js'
 import chatRouter from './routes/chat.js'
 import keywordsRouter from './routes/keywords.js'
 import chatBotRouter from './routes/chatBot.js'
+import authRouter from './routes/auth.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -44,7 +45,7 @@ export { app }
 app.use(cors({
   origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
 // JSON 요청 본문 파싱 (최대 10MB)
@@ -74,6 +75,9 @@ for (const dir of requiredDirs) {
 // ─────────────────────────────────────────────────
 // API 라우트 등록
 // ─────────────────────────────────────────────────
+
+// 인증 엔드포인트 (회원가입 / 로그인 / 내 정보)
+app.use('/api/auth', authRouter)
 
 // 오디오 전사(STT) 엔드포인트
 app.use('/api/transcribe', transcribeRouter)

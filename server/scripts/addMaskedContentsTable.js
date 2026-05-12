@@ -47,7 +47,7 @@ async function run() {
            m.transcript
     FROM   meetings m
     LEFT JOIN meeting_masked_contents mc ON mc.meeting_id = m.id
-    WHERE  mc.id IS NULL
+    WHERE  (mc.id IS NULL OR mc.mask_status = 'failed')
       AND  m.ai_summary IS NOT NULL
       AND  m.ai_summary != ''
   `)

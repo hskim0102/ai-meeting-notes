@@ -823,7 +823,7 @@ router.post('/:id/generate-rag', async (req, res) => {
       [meetingId]
     )
 
-    const difyRes = await fetch(`${ragApiUrl}/workflows/run`, {
+    fetch(`${ragApiUrl}/workflows/run`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${ragApiKey}`,
@@ -835,26 +835,33 @@ router.post('/:id/generate-rag', async (req, res) => {
         user: 'rag-agent',
       }),
     })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}))
+        const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
+        if (documentId) {
+          await query(
+            "UPDATE meeting_rag_docs SET document_id = ?, status = 'completed', error_msg = NULL WHERE meeting_id = ?",
+            [documentId, meetingId]
+          )
+          console.log(`[Dify RAG 수동] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
+        } else {
+          const errMsg = body?.message || body?.data?.error || 'document_id 없음'
+          await query(
+            "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
+            [errMsg, meetingId]
+          )
+          console.error(`[Dify RAG 수동] 실패 — meeting_id: ${meetingId}:`, errMsg)
+        }
+      })
+      .catch(async err => {
+        await query(
+          "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
+          [err.message, meetingId]
+        )
+        console.error(`[Dify RAG 수동] 오류 — meeting_id: ${meetingId}:`, err.message)
+      })
 
-    const body = await difyRes.json().catch(() => ({}))
-    const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
-
-    if (documentId) {
-      await query(
-        "UPDATE meeting_rag_docs SET document_id = ?, status = 'completed', error_msg = NULL WHERE meeting_id = ?",
-        [documentId, meetingId]
-      )
-      console.log(`[Dify RAG 수동] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
-      res.json({ success: true, data: { documentId } })
-    } else {
-      const errMsg = body?.message || body?.data?.error || 'document_id 없음'
-      await query(
-        "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
-        [errMsg, meetingId]
-      )
-      console.error(`[Dify RAG 수동] 실패 — meeting_id: ${meetingId}:`, errMsg)
-      res.status(500).json({ success: false, error: `RAG 생성 실패: ${errMsg}` })
-    }
+    res.json({ success: true, status: 'pending' })
   } catch (err) {
     console.error('[RAG 수동 생성 에러]', err.message)
     res.status(500).json({ success: false, error: 'RAG 생성 실패: ' + err.message })

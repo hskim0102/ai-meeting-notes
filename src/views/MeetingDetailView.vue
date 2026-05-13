@@ -86,6 +86,7 @@ onMounted(async () => {
     const res = await fetchMeeting(route.params.id)
     if (res.success) {
       meetingData.value = res.data
+      console.log('[MeetingDetail] ragDocumentId:', res.data.ragDocumentId)
       if (res.data.speakerMap) {
         speakerMap.value = typeof res.data.speakerMap === 'string'
           ? JSON.parse(res.data.speakerMap)
@@ -942,6 +943,7 @@ const sentimentColor = computed(() => {
     :meeting-id="meeting.id"
     :transcript="meeting.transcript || []"
     :ai-summary="meeting.aiSummary || ''"
+    :document-id="meeting.ragDocumentId || ''"
   />
 
   <!-- 화자 이름 편집 모달 -->

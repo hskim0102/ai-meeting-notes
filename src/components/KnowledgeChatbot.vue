@@ -1,60 +1,41 @@
 <script setup>
-import { ref, nextTick } from 'vue'
-import { marked } from 'marked'
+import { ref, nextTick, watch } from 'vue'
 import { useDarkMode } from '../composables/useDarkMode.js'
-import { chatWithMeeting } from '../services/api.js'
-
-marked.setOptions({ gfm: true, breaks: true })
+import { chatWithKnowledge } from '../services/api.js'
 
 const { isDark } = useDarkMode()
 
 const props = defineProps({
-  meetingId: [Number, String],
-  transcript: {
+  selectedDocs: {
     type: Array,
     default: () => [],
   },
-  aiSummary: {
-    type: String,
-    default: '',
+  isOpen: {
+    type: Boolean,
+    default: false,
   },
-  documentId: {
-    type: String,
-    default: '',
-  }
 })
 
-// 채팅 패널 열기/닫기
-const isOpen = ref(false)
+const emit = defineEmits(['close'])
 
-// 메시지 목록
 const messages = ref([])
-
-// 입력 필드
 const inputText = ref('')
-
-// 로딩 상태
 const isLoading = ref(false)
-
-// Dify 대화 세션 ID (대화 맥락 유지)
 const conversationId = ref('')
-
-// 메시지 영역 스크롤 ref
 const messagesContainer = ref(null)
 
-// 빠른 질문 목록
 const quickQuestions = [
-  '핵심 결정사항은?',
-  '액션 아이템 요약',
+  '선택한 회의의 핵심 결정사항은?',
+  '주요 액션 아이템 요약',
   '가장 많이 논의된 주제는?',
 ]
 
-// 패널 토글
-function togglePanel() {
-  isOpen.value = !isOpen.value
-}
+// 패널 열릴 때마다 대화 초기화 (새 문서 선택 시)
+watch(() => props.selectedDocs, () => {
+  messages.value = []
+  conversationId.value = ''
+})
 
-// 메시지 영역 맨 아래로 스크롤
 async function scrollToBottom() {
   await nextTick()
   if (messagesContainer.value) {
@@ -62,12 +43,17 @@ async function scrollToBottom() {
   }
 }
 
-// 메시지 전송
 async function sendMessage(text) {
   const question = text || inputText.value.trim()
   if (!question || isLoading.value) return
 
-  // 사용자 메시지 추가
+  // 선택된 문서명을 질문 앞에 컨텍스트로 추가 (첫 메시지만)
+  let query = question
+  if (messages.value.length === 0 && props.selectedDocs.length > 0) {
+    const docNames = props.selectedDocs.map(d => d.name).join(', ')
+    query = `[참고 문서: ${docNames}]\n${question}`
+  }
+
   messages.value.push({
     role: 'user',
     content: question,
@@ -79,12 +65,12 @@ async function sendMessage(text) {
   await scrollToBottom()
 
   try {
-    const result = await chatWithMeeting(props.meetingId, question, conversationId.value)
+    const result = await chatWithKnowledge(query, conversationId.value)
     const answer = result.data?.answer || '응답을 받지 못했습니다.'
 
-    // conversation_id 저장 (다음 요청에 재사용)
-    if (result.data?.conversationId) {
-      conversationId.value = result.data.conversationId
+    // 대화 세션 유지
+    if (result.data?.conversation_id) {
+      conversationId.value = result.data.conversation_id
     }
 
     messages.value.push({
@@ -105,12 +91,6 @@ async function sendMessage(text) {
   }
 }
 
-// 빠른 질문 클릭
-function askQuickQuestion(question) {
-  sendMessage(question)
-}
-
-// Enter 키 전송
 function handleKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
@@ -120,27 +100,13 @@ function handleKeydown(e) {
 </script>
 
 <template>
-  <!-- 플로팅 채팅 버튼 -->
-  <button
-    v-if="!isOpen"
-    class="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105 z-50"
-    :class="isDark
-      ? 'bg-primary-600 text-white hover:bg-primary-500 shadow-primary-900/30'
-      : 'bg-primary-500 text-white hover:bg-primary-600 shadow-primary-500/30'"
-    @click="togglePanel"
-  >
-    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-12.375 0c0-4.97 4.03-9 9-9s9 4.03 9 9-4.03 9-9 9a9.004 9.004 0 01-4.775-1.368l-4.35 1.243 1.243-4.35A8.963 8.963 0 013.375 12z" />
-    </svg>
-  </button>
-
   <!-- 오버레이 -->
   <Transition name="sidebar-overlay">
     <div
       v-if="isOpen"
       class="fixed inset-0 bg-black/30 z-40"
-      @click="isOpen = false"
-    ></div>
+      @click="emit('close')"
+    />
   </Transition>
 
   <!-- 채팅 슬라이드 패널 -->
@@ -158,23 +124,29 @@ function handleKeydown(e) {
         :class="isDark ? 'border-zinc-800' : 'border-slate-200'"
       >
         <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+          <div
+            class="w-8 h-8 rounded-lg flex items-center justify-center"
             :class="isDark ? 'bg-primary-500/15 text-primary-400' : 'bg-primary-50 text-primary-600'"
           >
             <svg class="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zm8.446-7.189L18 9.75l-.259-1.035a3.375 3.375 0 00-2.456-2.456L14.25 6l1.035-.259a3.375 3.375 0 002.456-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
             </svg>
           </div>
-          <h3 class="text-sm font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">
-            회의 Q&A
-          </h3>
+          <div>
+            <h3 class="text-sm font-semibold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">
+              AI 채팅 에이전트
+            </h3>
+            <p class="text-[10px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+              {{ selectedDocs.length }}개 문서 선택됨
+            </p>
+          </div>
         </div>
         <button
           class="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
           :class="isDark
             ? 'text-slate-400 hover:bg-zinc-800 hover:text-slate-200'
             : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'"
-          @click="togglePanel"
+          @click="emit('close')"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -182,12 +154,29 @@ function handleKeydown(e) {
         </button>
       </div>
 
+      <!-- 선택된 문서 목록 -->
+      <div
+        v-if="selectedDocs.length > 0"
+        class="px-4 py-2 border-b flex flex-wrap gap-1 shrink-0"
+        :class="isDark ? 'border-zinc-800 bg-zinc-950/50' : 'border-slate-100 bg-slate-50'"
+      >
+        <span
+          v-for="doc in selectedDocs"
+          :key="doc.id"
+          class="text-[10px] px-2 py-0.5 rounded-full truncate max-w-[160px]"
+          :class="isDark ? 'bg-zinc-800 text-slate-400' : 'bg-white border border-slate-200 text-slate-500'"
+          :title="doc.name"
+        >
+          {{ doc.name }}
+        </span>
+      </div>
+
       <!-- 메시지 영역 -->
       <div
         ref="messagesContainer"
         class="flex-1 overflow-y-auto px-4 py-3 space-y-3"
       >
-        <!-- 초기 안내 메시지 -->
+        <!-- 초기 안내 -->
         <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full py-6">
           <div
             class="w-12 h-12 rounded-full flex items-center justify-center mb-3"
@@ -198,7 +187,7 @@ function handleKeydown(e) {
             </svg>
           </div>
           <p class="text-sm font-medium mb-1" :class="isDark ? 'text-slate-300' : 'text-slate-600'">
-            회의 내용에 대해 질문하세요
+            선택한 회의록에 대해 질문하세요
           </p>
           <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
             아래 빠른 질문을 클릭하거나 직접 입력하세요
@@ -207,14 +196,11 @@ function handleKeydown(e) {
 
         <!-- 메시지 목록 -->
         <template v-for="(msg, i) in messages" :key="i">
-          <!-- 사용자 메시지 (오른쪽 정렬) -->
           <div v-if="msg.role === 'user'" class="flex justify-end">
             <div class="max-w-[80%]">
               <div
                 class="px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm"
-                :class="isDark
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-primary-500 text-white'"
+                :class="isDark ? 'bg-primary-600 text-white' : 'bg-primary-500 text-white'"
               >
                 {{ msg.content }}
               </div>
@@ -223,17 +209,16 @@ function handleKeydown(e) {
               </p>
             </div>
           </div>
-
-          <!-- AI 응답 (왼쪽 정렬) -->
           <div v-else class="flex justify-start">
             <div class="max-w-[85%]">
               <div
-                class="px-3.5 py-2.5 rounded-2xl rounded-bl-md text-sm chat-markdown"
+                class="px-3.5 py-2.5 rounded-2xl rounded-bl-md text-sm whitespace-pre-line"
                 :class="msg.error
                   ? (isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700')
                   : (isDark ? 'bg-zinc-800 text-slate-200' : 'bg-slate-100 text-slate-800')"
-                v-html="msg.error ? msg.content : marked.parse(msg.content)"
-              />
+              >
+                {{ msg.content }}
+              </div>
               <p class="text-[10px] mt-1" :class="isDark ? 'text-slate-600' : 'text-slate-300'">
                 {{ msg.timestamp }}
               </p>
@@ -247,18 +232,9 @@ function handleKeydown(e) {
             class="px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-1.5"
             :class="isDark ? 'bg-zinc-800' : 'bg-slate-100'"
           >
-            <span
-              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
-              style="animation-delay: 0ms;"
-            />
-            <span
-              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
-              style="animation-delay: 150ms;"
-            />
-            <span
-              class="w-2 h-2 rounded-full animate-bounce bg-slate-400"
-              style="animation-delay: 300ms;"
-            />
+            <span class="w-2 h-2 rounded-full animate-bounce bg-slate-400" style="animation-delay: 0ms;" />
+            <span class="w-2 h-2 rounded-full animate-bounce bg-slate-400" style="animation-delay: 150ms;" />
+            <span class="w-2 h-2 rounded-full animate-bounce bg-slate-400" style="animation-delay: 300ms;" />
           </div>
         </div>
       </div>
@@ -275,7 +251,7 @@ function handleKeydown(e) {
           :class="isDark
             ? 'border-zinc-700 text-slate-300 hover:bg-zinc-800 hover:border-zinc-600'
             : 'border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'"
-          @click="askQuickQuestion(q)"
+          @click="sendMessage(q)"
         >
           {{ q }}
         </button>
@@ -336,20 +312,4 @@ function handleKeydown(e) {
 .sidebar-overlay-leave-to {
   opacity: 0;
 }
-
-.chat-markdown :deep(p) { margin: 0.25rem 0; line-height: 1.6; }
-.chat-markdown :deep(p:first-child) { margin-top: 0; }
-.chat-markdown :deep(p:last-child) { margin-bottom: 0; }
-.chat-markdown :deep(strong) { font-weight: 700; }
-.chat-markdown :deep(em) { font-style: italic; }
-.chat-markdown :deep(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.25rem 0; }
-.chat-markdown :deep(ol) { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
-.chat-markdown :deep(li) { margin: 0.15rem 0; }
-.chat-markdown :deep(code) { font-family: monospace; font-size: 0.85em; padding: 0.1em 0.3em; border-radius: 3px; background: rgba(0,0,0,0.08); }
-.chat-markdown :deep(pre) { padding: 0.5rem 0.75rem; border-radius: 6px; overflow-x: auto; margin: 0.25rem 0; background: rgba(0,0,0,0.1); }
-.chat-markdown :deep(pre code) { background: transparent; padding: 0; }
-.chat-markdown :deep(h1), .chat-markdown :deep(h2), .chat-markdown :deep(h3) { font-weight: 700; margin: 0.5rem 0 0.25rem; line-height: 1.4; }
-.chat-markdown :deep(h1) { font-size: 1.1em; }
-.chat-markdown :deep(h2) { font-size: 1.05em; }
-.chat-markdown :deep(h3) { font-size: 1em; }
 </style>

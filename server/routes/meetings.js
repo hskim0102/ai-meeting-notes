@@ -95,6 +95,7 @@ function formatMeeting(row) {
       return row.speaker_map
     })(),
     createdAt: row.created_at,
+    ragDocumentId: row.document_id || null,
   }
 }
 
@@ -104,22 +105,22 @@ router.get('/', async (req, res) => {
     const { status, page, limit } = req.query
     const user = req.user
 
-    let sql = 'SELECT * FROM meetings'
+    let sql = 'SELECT m.*, r.document_id FROM meetings m LEFT JOIN meeting_rag_docs r ON r.meeting_id = m.id'
     const params = []
     const conditions = []
 
-    if (status) { conditions.push('status = ?'); params.push(status) }
+    if (status) { conditions.push('m.status = ?'); params.push(status) }
 
     // member 권한: 자신이 참석자인 회의만 조회
     if (user && user.role === 'member') {
-      conditions.push('JSON_CONTAINS(participants, JSON_QUOTE(?))')
+      conditions.push('JSON_CONTAINS(m.participants, JSON_QUOTE(?))')
       params.push(user.name)
     }
 
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ')
     }
-    sql += ' ORDER BY date DESC, time DESC'
+    sql += ' ORDER BY m.date DESC, m.time DESC'
 
     const rows = await query(sql, params)
 
@@ -351,7 +352,10 @@ router.get('/:id/masked', async (req, res) => {
 // ── 회의 상세 조회 ──
 router.get('/:id', async (req, res) => {
   try {
-    const rows = await query('SELECT * FROM meetings WHERE id = ?', [req.params.id])
+    const rows = await query(
+      'SELECT m.*, r.document_id FROM meetings m LEFT JOIN meeting_rag_docs r ON r.meeting_id = m.id WHERE m.id = ?',
+      [req.params.id]
+    )
     if (rows.length === 0) {
       return res.status(404).json({ success: false, error: '회의를 찾을 수 없습니다.' })
     }

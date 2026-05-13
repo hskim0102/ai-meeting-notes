@@ -142,22 +142,16 @@ export function extractKeywords(question) {
  * @returns {Promise<string>} - AI 응답 텍스트
  * @throws {Error} - API 오류, 타임아웃 시 에러
  */
-export async function askDify(context, question, history = []) {
+export async function askDify(context, question, documentId = '', conversationId = '') {
   // ── 환경 변수 검증 ──
-  // 챗봇 전용 API 키를 우선 사용, 없으면 공통 API 키 사용
   const apiKey = process.env.DIFY_CHAT_API_KEY || process.env.DIFY_API_KEY
   const apiUrl = process.env.DIFY_API_URL
 
   if (!apiKey) {
-    throw new Error(
-      'DIFY_CHAT_API_KEY 또는 DIFY_API_KEY 환경 변수가 설정되지 않았습니다.'
-    )
+    throw new Error('DIFY_CHAT_API_KEY 또는 DIFY_API_KEY 환경 변수가 설정되지 않았습니다.')
   }
-
   if (!apiUrl) {
-    throw new Error(
-      'DIFY_API_URL 환경 변수가 설정되지 않았습니다.'
-    )
+    throw new Error('DIFY_API_URL 환경 변수가 설정되지 않았습니다.')
   }
 
   // ── AbortController로 타임아웃 제어 ──
@@ -165,20 +159,20 @@ export async function askDify(context, question, history = []) {
   const timeoutId = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS)
 
   try {
-    console.log(`[챗봇] Dify 챗봇 Q&A 요청 (질문: ${question.substring(0, 50)}...)`)
+    console.log(`[챗봇] Dify Chat Message 요청 (질문: ${question.substring(0, 50)}..., document_id: ${documentId || '없음'})`)
 
-    const response = await fetch(`${apiUrl}/workflows/run`, {
+    const response = await fetch(`${apiUrl}/chat-messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        query: question,
         inputs: {
-          context,
-          question,
-          history: JSON.stringify(history),
+          document_id: documentId
         },
+        conversation_id: conversationId || '',
         response_mode: 'blocking',
         user: 'chatbot-user',
       }),
@@ -187,37 +181,27 @@ export async function askDify(context, question, history = []) {
 
     clearTimeout(timeoutId)
 
-    // ── HTTP 에러 처리 ──
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '응답 본문 없음')
       throw new Error(`Dify API 오류 (HTTP ${response.status}): ${errorBody.substring(0, 200)}`)
     }
 
     const result = await response.json()
+    const answer = result.answer || ''
 
-    // ── 워크플로우 실행 실패 확인 ──
-    if (result.data?.status === 'failed') {
-      throw new Error(`Dify 챗봇 워크플로우 실행 실패: ${result.data?.error || '알 수 없는 오류'}`)
+    console.log(`[챗봇] Dify 응답 수신 완료 (conversation_id: ${result.conversation_id})`)
+    return {
+      answer: typeof answer === 'string' ? answer : JSON.stringify(answer),
+      conversationId: result.conversation_id || '',
     }
 
-    // ── 응답 텍스트 추출 ──
-    const outputs = result.data?.outputs || {}
-    const answer = outputs.answer || outputs.result || outputs.text || outputs.output || ''
-
-    console.log(`[챗봇] Dify 응답 수신 완료`)
-    return typeof answer === 'string' ? answer : JSON.stringify(answer)
-
   } catch (error) {
-    // ── 타임아웃 에러 ──
     if (error.name === 'AbortError') {
       throw new Error(`챗봇 응답 타임아웃 (${CHAT_TIMEOUT_MS / 1000}초 초과)`)
     }
-
-    // ── 네트워크 연결 에러 ──
     if (error.cause?.code === 'ECONNREFUSED' || error.cause?.code === 'ENOTFOUND') {
       throw new Error(`Dify 서버에 연결할 수 없습니다 (${apiUrl})`)
     }
-
     throw error
   } finally {
     clearTimeout(timeoutId)
@@ -234,7 +218,7 @@ export async function askDify(context, question, history = []) {
  * @returns {Promise<{answer: string, sources: Array}>}
  * @throws {Error} - 회의 미존재, API 오류 시 에러
  */
-export async function chatWithMeeting(meetingId, question, history = []) {
+export async function chatWithMeeting(meetingId, question, conversationId = '') {
   // ── DB에서 회의 조회 ──
   const rows = await query(
     `SELECT id, title, date, participants, ai_summary, key_decisions, full_text, transcript
@@ -247,6 +231,13 @@ export async function chatWithMeeting(meetingId, question, history = []) {
   }
 
   const meeting = rows[0]
+
+  // ── meeting_rag_docs에서 document_id 조회 ──
+  const [ragRow] = await query(
+    'SELECT document_id FROM meeting_rag_docs WHERE meeting_id = ?',
+    [meetingId]
+  )
+  const documentId = ragRow?.document_id || ''
 
   // ── JSON 컬럼 파싱 ──
   const parseJsonColumn = (value) => {
@@ -268,10 +259,11 @@ export async function chatWithMeeting(meetingId, question, history = []) {
   const context = buildMeetingContext(meeting)
 
   // ── Dify에 질문 ──
-  const answer = await askDify(context, question, history)
+  const { answer, conversationId: newConversationId } = await askDify(context, question, documentId, conversationId)
 
   return {
     answer,
+    conversationId: newConversationId,
     sources: [{
       id: meeting.id,
       title: meeting.title,

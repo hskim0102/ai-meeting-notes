@@ -11,8 +11,8 @@ router.post('/meeting/:id', validate(chatQuestionSchema), async (req, res) => {
     if (isNaN(meetingId)) {
       return res.status(400).json({ success: false, error: '유효하지 않은 회의 ID입니다.' })
     }
-    const { question, history } = req.body
-    const result = await chatWithMeeting(meetingId, question.trim(), history)
+    const { question, conversationId = '' } = req.body
+    const result = await chatWithMeeting(meetingId, question.trim(), conversationId)
     res.json({ success: true, data: result })
   } catch (err) {
     console.error(`[챗봇 오류] 단일 회의 Q&A: ${err.message}`)

@@ -527,11 +527,11 @@ export async function applyTranscriptCorrections(fullText, segments, corrections
 // 챗봇 API
 // ─────────────────────────────────────────────────
 
-export async function chatWithMeeting(meetingId, question, history = []) {
+export async function chatWithMeeting(meetingId, question, conversationId = '') {
   const res = await fetch(`${API_BASE}/chat/meeting/${meetingId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, history }),
+    body: JSON.stringify({ question, conversationId }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || '챗봇 질문 실패')

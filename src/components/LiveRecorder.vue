@@ -12,6 +12,12 @@
 
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { transcribeAudio, saveRecording } from '../services/api.js'
+import { useSubtitleEngine } from '../composables/useSubtitleEngine.js'
+import SubtitleOverlay from './SubtitleOverlay.vue'
+
+// ── 자막 엔진 ──
+const { segments, isListening, isSpeechSupported, startSubtitles, stopSubtitles, clearSegments } = useSubtitleEngine()
+const showSubtitle = ref(false)
 
 // ── Props 및 이벤트 정의 ──
 const props = defineProps({
@@ -219,6 +225,10 @@ async function startRecording() {
     status.value = 'recording'
     elapsedSeconds.value = 0
 
+    // 자막 시작
+    showSubtitle.value = true
+    startSubtitles(mediaStream)
+
     // 타이머 시작: 1초마다 경과 시간 업데이트
     timerInterval = setInterval(() => {
       elapsedSeconds.value++
@@ -256,6 +266,8 @@ function stopRecording() {
     clearInterval(timerInterval)
     timerInterval = null
   }
+
+  stopSubtitles()
 }
 
 // ─────────────────────────────────────────────────
@@ -271,6 +283,8 @@ function discardRecording() {
   elapsedSeconds.value = 0
   savedRecordingId.value = null
   status.value = 'idle'
+  clearSegments()
+  showSubtitle.value = false
 }
 
 // ─────────────────────────────────────────────────
@@ -362,6 +376,7 @@ async function sendToServer() {
 // ─────────────────────────────────────────────────
 
 onBeforeUnmount(() => {
+  stopSubtitles()
   // 타이머 정리
   if (timerInterval) {
     clearInterval(timerInterval)
@@ -411,7 +426,7 @@ onBeforeUnmount(() => {
     <!-- ════════════════════════════════════════════ -->
     <!-- 상태 2: 녹음 중 (recording) - 타이머 + 중지  -->
     <!-- ════════════════════════════════════════════ -->
-    <div v-else-if="status === 'recording'" class="text-center py-6">
+    <div v-else-if="status === 'recording'" class="text-center py-6" :class="{ 'pb-60': showSubtitle }">
       <!-- 녹음 중 시각적 피드백: 펄스 애니메이션 원 -->
       <div class="relative w-24 h-24 mx-auto mb-4">
         <!-- 외곽 펄스 링 (애니메이션) -->
@@ -589,4 +604,13 @@ onBeforeUnmount(() => {
       </div>
     </transition>
   </div>
+
+  <!-- 실시간 자막 오버레이 -->
+  <SubtitleOverlay
+    :segments="segments"
+    :isListening="isListening"
+    :visible="showSubtitle"
+    :isSpeechAvailable="isSpeechSupported"
+    @close="showSubtitle = false"
+  />
 </template>

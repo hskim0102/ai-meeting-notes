@@ -13,6 +13,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { MotionPlugin } from '@vueuse/motion'
 import './style.css'
 import App from './App.vue'
+import { sessionReady } from './composables/useAuth.js'
 
 import DashboardView from './views/DashboardView.vue'
 import MeetingDetailView from './views/MeetingDetailView.vue'
@@ -55,8 +56,9 @@ const router = createRouter({
   ],
 })
 
-// 라우트 가드: 인증 체크
-router.beforeEach((to, from, next) => {
+// 라우트 가드: 세션 확인 완료 후 인증 체크
+router.beforeEach(async (to, from, next) => {
+  await sessionReady
   const user = JSON.parse(localStorage.getItem('auth_user') || 'null')
   if (!to.meta.public && !user) {
     next({ name: 'login' })

@@ -191,9 +191,14 @@ async function startRecording() {
     // ── MediaRecorder 이벤트 핸들러 설정 ──
 
     // ondataavailable: 녹음 데이터가 생성될 때마다 청크 배열에 추가
+    // 60초마다 청크를 하나의 Blob으로 병합하여 장시간 녹음 시 메모리 누적 방지
     mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         audioChunks.push(event.data)
+        if (audioChunks.length >= 60) {
+          const merged = new Blob(audioChunks, { type: mimeType })
+          audioChunks = [merged]
+        }
       }
     }
 

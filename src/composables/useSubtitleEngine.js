@@ -19,6 +19,7 @@ export function useSubtitleEngine() {
   let restartCount = 0
   const MAX_RESTARTS = 3
   let currentMimeType = 'audio/webm'
+  let isSendingChunk = false
 
   // ─────────────────────────────────────────────────
   // 세그먼트 조작
@@ -90,6 +91,8 @@ export function useSubtitleEngine() {
 
   async function sendChunk(blob, startSec, endSec) {
     if (!blob || blob.size < 1000) return
+    if (isSendingChunk) return // 이전 요청 진행 중이면 스킵 (폭주 방지)
+    isSendingChunk = true
     try {
       const file = new File([blob], `chunk_${Date.now()}.webm`, { type: 'audio/webm' })
       const result = await transcribeAudio(file, 'ko')
@@ -98,6 +101,8 @@ export function useSubtitleEngine() {
       }
     } catch {
       // 조용히 무시 — confirmed 세그먼트 유지
+    } finally {
+      isSendingChunk = false
     }
   }
 
@@ -140,6 +145,7 @@ export function useSubtitleEngine() {
     recognition.lang = 'ko-KR'
 
     recognition.onresult = (event) => {
+      restartCount = 0 // 인식 성공 시 카운트 리셋 (일시적 에러로 영구 중단 방지)
       let interimText = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const r = event.results[i]

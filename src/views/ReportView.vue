@@ -143,10 +143,7 @@ const efficiencyScore = (meeting) => {
         </div>
         <!-- PDF 내보내기 -->
         <button
-          class="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-          :class="isDark
-            ? 'bg-primary-600 text-white hover:bg-primary-500'
-            : 'bg-primary-500 text-white hover:bg-primary-600'"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-primary-500 to-accent-500 text-white hover:from-primary-600 hover:to-accent-600 transition-all shadow-md shadow-primary-200/40 hover:shadow-lg hover:-translate-y-0.5"
           @click="exportPDF"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -158,79 +155,79 @@ const efficiencyScore = (meeting) => {
     </div>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <!-- 총 회의 수 -->
-      <div class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+      <div
+        class="relative rounded-2xl border overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+        :class="isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-slate-200'"
       >
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-            :class="isDark ? 'bg-primary-500/15' : 'bg-primary-50'"
-          >
-            <svg class="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-primary-500 to-accent-500"></div>
+        <div class="p-5 flex items-center gap-4">
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center bg-gradient-to-br from-primary-500 to-accent-500 text-white shadow-lg shadow-primary-500/25 shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
             </svg>
           </div>
           <div>
-            <p class="text-xs font-medium" :class="isDark ? 'text-slate-400' : 'text-slate-500'">총 회의 수</p>
-            <p class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalMeetings }}회</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wide mb-0.5" :class="isDark ? 'text-slate-500' : 'text-slate-400'">총 회의 수</p>
+            <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalMeetings }}회</p>
           </div>
         </div>
       </div>
 
       <!-- 총 회의 시간 -->
-      <div class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+      <div
+        class="relative rounded-2xl border overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+        :class="isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-slate-200'"
       >
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-            :class="isDark ? 'bg-accent-500/15' : 'bg-accent-50'"
-          >
-            <svg class="w-5 h-5 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-accent-500 to-primary-500"></div>
+        <div class="p-5 flex items-center gap-4">
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center bg-gradient-to-br from-accent-500 to-primary-500 text-white shadow-lg shadow-accent-500/25 shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div>
-            <p class="text-xs font-medium" :class="isDark ? 'text-slate-400' : 'text-slate-500'">총 회의 시간</p>
-            <p class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalHours }}시간</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wide mb-0.5" :class="isDark ? 'text-slate-500' : 'text-slate-400'">총 회의 시간</p>
+            <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalHours }}시간</p>
           </div>
         </div>
       </div>
 
       <!-- 액션아이템 완료율 -->
-      <div class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+      <div
+        class="relative rounded-2xl border overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+        :class="isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-slate-200'"
       >
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-            :class="isDark ? 'bg-success-500/15' : 'bg-success-50'"
-          >
-            <svg class="w-5 h-5 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-success-400 to-success-600"></div>
+        <div class="p-5 flex items-center gap-4">
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center bg-gradient-to-br from-success-400 to-success-600 text-white shadow-lg shadow-success-500/25 shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div>
-            <p class="text-xs font-medium" :class="isDark ? 'text-slate-400' : 'text-slate-500'">액션아이템 완료율</p>
-            <p class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ completionRate }}%</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wide mb-0.5" :class="isDark ? 'text-slate-500' : 'text-slate-400'">액션아이템 완료율</p>
+            <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ completionRate }}%</p>
           </div>
         </div>
       </div>
 
       <!-- 평균 감정 점수 -->
-      <div class="rounded-xl border p-5"
-        :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'"
+      <div
+        class="relative rounded-2xl border overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
+        :class="isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-slate-200'"
       >
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-lg flex items-center justify-center"
-            :class="isDark ? 'bg-warning-500/15' : 'bg-warning-50'"
-          >
-            <svg class="w-5 h-5 text-warning-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-warning-400 to-warning-600"></div>
+        <div class="p-5 flex items-center gap-4">
+          <div class="w-11 h-11 rounded-2xl flex items-center justify-center bg-gradient-to-br from-warning-400 to-warning-600 text-white shadow-lg shadow-warning-500/25 shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
             </svg>
           </div>
           <div>
-            <p class="text-xs font-medium" :class="isDark ? 'text-slate-400' : 'text-slate-500'">평균 감정 점수</p>
-            <p class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ avgSentiment }}점</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wide mb-0.5" :class="isDark ? 'text-slate-500' : 'text-slate-400'">평균 감정 점수</p>
+            <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ avgSentiment }}점</p>
           </div>
         </div>
       </div>

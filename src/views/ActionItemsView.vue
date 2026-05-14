@@ -153,57 +153,65 @@ const completionRate = computed(() => {
 
 <template>
   <div class="p-8">
-    <div class="mb-8">
-      <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">액션 아이템</h1>
-      <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">모든 회의에서 발생한 액션 아이템을 관리하세요</p>
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">액션 아이템</h1>
+        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+          전체 <span class="font-semibold" :class="isDark ? 'text-slate-300' : 'text-slate-700'">{{ totalCount }}개</span> 항목 중
+          <span class="font-semibold text-success-500">{{ statusCounts.done }}개</span> 완료
+        </p>
+      </div>
+      <div
+        class="w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-warning-400 to-warning-600 text-white shadow-lg shadow-warning-500/20"
+      >
+        <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
     </div>
 
     <!-- 요약 바 -->
-    <div class="rounded-xl border p-5 mb-6" :class="isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'">
-      <!-- 상태별 카운트 -->
-      <div class="flex items-center gap-6 mb-4 flex-wrap">
-        <div>
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">전체</p>
-          <p class="text-xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalCount }}</p>
+    <div class="rounded-2xl border overflow-hidden mb-6" :class="isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-slate-200'">
+      <!-- 상태별 카운트 그리드 -->
+      <div class="grid grid-cols-3 sm:grid-cols-6 divide-x" :class="isDark ? 'divide-zinc-800' : 'divide-slate-100'">
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">전체</p>
+          <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-100' : 'text-slate-900'">{{ totalCount }}</p>
         </div>
-        <div>
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">대기</p>
-          <p class="text-xl font-bold text-slate-500">{{ statusCounts.pending }}</p>
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">대기</p>
+          <p class="text-2xl font-bold tabular-nums" :class="isDark ? 'text-slate-400' : 'text-slate-500'">{{ statusCounts.pending }}</p>
         </div>
-        <div>
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">진행중</p>
-          <p class="text-xl font-bold text-primary-500">{{ statusCounts['in-progress'] }}</p>
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">진행중</p>
+          <p class="text-2xl font-bold tabular-nums text-primary-500">{{ statusCounts['in-progress'] }}</p>
         </div>
-        <div>
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">검토중</p>
-          <p class="text-xl font-bold text-warning-500">{{ statusCounts.review }}</p>
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">검토중</p>
+          <p class="text-2xl font-bold tabular-nums text-warning-500">{{ statusCounts.review }}</p>
         </div>
-        <div>
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">완료</p>
-          <p class="text-xl font-bold text-success-500">{{ statusCounts.done }}</p>
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">완료</p>
+          <p class="text-2xl font-bold tabular-nums text-success-500">{{ statusCounts.done }}</p>
         </div>
-        <div v-if="overdueCount > 0">
-          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">지연</p>
-          <p class="text-xl font-bold text-danger-500">{{ overdueCount }}</p>
+        <div class="px-4 py-4 text-center">
+          <p class="text-[10px] font-semibold uppercase tracking-wide mb-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">지연</p>
+          <p class="text-2xl font-bold tabular-nums" :class="overdueCount > 0 ? 'text-danger-500' : (isDark ? 'text-slate-600' : 'text-slate-300')">{{ overdueCount }}</p>
         </div>
       </div>
 
       <!-- 진행률 바 -->
-      <div class="h-1.5 rounded-full overflow-hidden flex" :class="isDark ? 'bg-slate-700' : 'bg-slate-100'">
-        <div
-          class="h-full bg-success-500 transition-all duration-300"
-          :style="{ width: `${completionRate}%` }"
-        ></div>
-        <div
-          class="h-full bg-warning-500 transition-all duration-300"
-          :style="{ width: `${totalCount ? (statusCounts.review / totalCount * 100) : 0}%` }"
-        ></div>
-        <div
-          class="h-full bg-primary-500 transition-all duration-300"
-          :style="{ width: `${totalCount ? (statusCounts['in-progress'] / totalCount * 100) : 0}%` }"
-        ></div>
+      <div class="px-4 pb-4">
+        <div class="h-2 rounded-full overflow-hidden flex" :class="isDark ? 'bg-zinc-800' : 'bg-slate-100'">
+          <div class="h-full bg-gradient-to-r from-success-400 to-success-500 transition-all duration-500" :style="{ width: `${completionRate}%` }"></div>
+          <div class="h-full bg-warning-500 transition-all duration-500" :style="{ width: `${totalCount ? (statusCounts.review / totalCount * 100) : 0}%` }"></div>
+          <div class="h-full bg-primary-500 transition-all duration-500" :style="{ width: `${totalCount ? (statusCounts['in-progress'] / totalCount * 100) : 0}%` }"></div>
+        </div>
+        <div class="flex items-center justify-between mt-1.5">
+          <p class="text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">완료율</p>
+          <p class="text-xs font-semibold" :class="isDark ? 'text-slate-300' : 'text-slate-700'">{{ completionRate }}%</p>
+        </div>
       </div>
-      <p class="text-xs mt-1.5" :class="isDark ? 'text-slate-500' : 'text-slate-400'">완료율 {{ completionRate }}%</p>
     </div>
 
     <!-- 필터 & 정렬 -->

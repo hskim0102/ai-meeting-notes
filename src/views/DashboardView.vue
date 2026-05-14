@@ -213,44 +213,60 @@ const formatDuration = (min) => {
 <template>
   <div class="p-8">
     <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">대시보드</h1>
-      <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">오늘의 회의 현황과 주요 지표를 확인하세요</p>
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">대시보드</h1>
+        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+          {{ new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) }}
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <router-link
+          to="/search"
+          class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all"
+          :class="isDark ? 'border-zinc-700 text-slate-400 hover:bg-zinc-800 hover:text-slate-200' : 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+          검색
+        </router-link>
+        <router-link
+          to="/meetings/new"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl text-sm font-semibold hover:from-primary-600 hover:to-accent-600 transition-all shadow-md shadow-primary-200/40 hover:shadow-lg hover:-translate-y-0.5"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          새 회의록
+        </router-link>
+      </div>
     </div>
 
     <!-- 오늘의 요약 배너 -->
     <div
       class="relative overflow-hidden rounded-2xl p-5 mb-8"
       :class="isDark
-        ? 'bg-gradient-to-r from-primary-900/60 via-primary-800/40 to-accent-900/50 border border-primary-700/30'
-        : 'bg-gradient-to-r from-primary-500 via-primary-600 to-accent-600'"
+        ? 'bg-gradient-to-br from-primary-900/60 via-slate-900 to-accent-900/30 border border-primary-700/20'
+        : 'bg-gradient-to-br from-primary-500 via-primary-600 to-accent-600'"
     >
-      <div class="absolute inset-0 opacity-10">
-        <div class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/20"></div>
-        <div class="absolute -left-5 -bottom-5 w-24 h-24 rounded-full bg-white/10"></div>
+      <!-- 배경 장식 -->
+      <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -right-8 -top-8 w-36 h-36 rounded-full" :class="isDark ? 'bg-primary-500/10' : 'bg-white/15'"></div>
+        <div class="absolute right-20 bottom-0 w-20 h-20 rounded-full" :class="isDark ? 'bg-accent-500/10' : 'bg-white/10'"></div>
+        <div class="absolute -left-4 top-4 w-16 h-16 rounded-full" :class="isDark ? 'bg-primary-400/5' : 'bg-white/8'"></div>
       </div>
-      <div class="relative flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium mb-1" :class="isDark ? 'text-primary-300' : 'text-white/80'">
-            {{ new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) }}
-          </p>
-          <p v-if="!loading" class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-white'">
-            {{ greetingText }}. {{ todaySummaryText }}
-          </p>
-          <div v-else class="h-6 w-80 rounded skeleton-pulse bg-white/20"></div>
+      <div class="relative">
+        <p v-if="!loading" class="text-base font-semibold" :class="isDark ? 'text-slate-100' : 'text-white'">
+          {{ greetingText }} 👋
+        </p>
+        <p v-if="!loading" class="text-sm mt-1 font-medium" :class="isDark ? 'text-primary-300/80' : 'text-white/80'">
+          {{ todaySummaryText }}
+        </p>
+        <div v-if="loading" class="space-y-2">
+          <div class="h-5 w-48 rounded-lg bg-white/20 animate-pulse"></div>
+          <div class="h-4 w-80 rounded-lg bg-white/15 animate-pulse"></div>
         </div>
-        <router-link
-          to="/meetings/new"
-          class="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-          :class="isDark
-            ? 'bg-primary-500 text-white hover:bg-primary-400'
-            : 'bg-white/20 text-white hover:bg-white/30 backdrop-blur-sm'"
-        >
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          새 회의
-        </router-link>
       </div>
     </div>
 

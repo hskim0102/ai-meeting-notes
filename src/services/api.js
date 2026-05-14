@@ -563,3 +563,36 @@ export async function generateMeetingRag(id) {
   if (!res.ok) throw new Error(data.error || 'RAG 생성 실패')
   return data
 }
+
+// ─────────────────────────────────────────────────
+// 사용자 관리 API (관리자 전용)
+// ─────────────────────────────────────────────────
+
+export async function fetchUsers() {
+  const res = await apiFetch(`${API_BASE}/users`)
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '사용자 목록 조회 실패')
+  return data
+}
+
+export async function updateUserRole(userId, role) {
+  const res = await apiFetch(`${API_BASE}/users/${userId}/role`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '역할 변경 실패')
+  return data
+}
+
+export async function updateUserStatus(userId, status) {
+  const res = await apiFetch(`${API_BASE}/users/${userId}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || '상태 변경 실패')
+  return data
+}

@@ -53,8 +53,20 @@ const filteredByDate = computed(() => {
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-900'">회의 목록</h1>
-        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">전체 {{ totalCount }}개의 회의 <span v-if="dataSource === 'mock'" class="text-xs">(오프라인)</span></p>
+        <p class="text-sm mt-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+          전체 <span class="font-semibold" :class="isDark ? 'text-slate-300' : 'text-slate-700'">{{ totalCount }}개</span>의 회의
+          <span v-if="dataSource === 'mock'" class="text-xs text-amber-500 ml-1">(오프라인)</span>
+        </p>
       </div>
+      <router-link
+        to="/meetings/new"
+        class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-500 to-accent-500 text-white rounded-xl text-sm font-semibold hover:from-primary-600 hover:to-accent-600 transition-all shadow-md shadow-primary-200/40 hover:shadow-lg hover:-translate-y-0.5"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        새 회의록
+      </router-link>
     </div>
 
     <!-- Filters -->

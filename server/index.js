@@ -28,6 +28,7 @@ import keywordsRouter from './routes/keywords.js'
 import chatBotRouter from './routes/chatBot.js'
 import authRouter from './routes/auth.js'
 import maskRouter from './routes/mask.js'
+import usersRouter from './routes/users.js'
 import { testConnection } from './services/database.js'
 
 // ── ESM 환경에서 __dirname 대체 ──
@@ -79,6 +80,9 @@ for (const dir of requiredDirs) {
 
 // 인증 엔드포인트 (회원가입 / 로그인 / 내 정보)
 app.use('/api/auth', authRouter)
+
+// 사용자 관리 엔드포인트 (관리자 전용)
+app.use('/api/users', usersRouter)
 
 // 오디오 전사(STT) 엔드포인트
 app.use('/api/transcribe', transcribeRouter)

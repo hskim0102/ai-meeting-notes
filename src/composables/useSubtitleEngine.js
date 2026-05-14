@@ -234,6 +234,10 @@ export function useSubtitleEngine() {
   function clearSegments() {
     segments.value = []
     restartCount = 0
+    // 새 녹음을 위해 Web Speech API 재활성화
+    isSpeechSupported.value = (
+      'SpeechRecognition' in globalThis || 'webkitSpeechRecognition' in globalThis
+    )
   }
 
   return {

@@ -32,7 +32,6 @@ import AuditLogView from './views/AuditLogView.vue'
 import UserManagementView from './views/UserManagementView.vue'
 import RecordingsListView from './views/RecordingsListView.vue'
 import ChatView from './views/ChatView.vue'
-import KnowledgeMeetingsView from './views/KnowledgeMeetingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -54,7 +53,6 @@ const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsView },
     { path: '/audit-log', name: 'audit-log', component: AuditLogView, meta: { requiresAdmin: true } },
     { path: '/admin/users', name: 'user-management', component: UserManagementView, meta: { requiresAdmin: true } },
-    { path: '/knowledge-meetings', name: 'knowledge-meetings', component: KnowledgeMeetingsView },
   ],
 })
 

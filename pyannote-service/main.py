@@ -7,6 +7,10 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 프로젝트 루트의 .env 파일에서 HF_TOKEN 등 환경변수 로드
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.responses import JSONResponse

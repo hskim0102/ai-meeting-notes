@@ -37,6 +37,7 @@ function timeToSeconds(time) {
 
 // 초 → "MM:SS" 표시
 function formatSeconds(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '00:00'
   const m = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
@@ -62,8 +63,15 @@ function onTimeUpdate() {
 }
 
 function onLoadedMetadata() {
-  if (audioRef.value) {
-    duration.value = audioRef.value.duration
+  if (!audioRef.value) return
+  const d = audioRef.value.duration
+  // MediaRecorder로 녹음한 WebM은 duration 메타데이터가 없어 Infinity를 반환할 수 있음
+  // 이 경우 마지막 타임라인 항목의 시간을 duration으로 사용
+  if (Number.isFinite(d)) {
+    duration.value = d
+  } else if (props.transcript.length > 0) {
+    const lastTime = timeToSeconds(props.transcript[props.transcript.length - 1].time)
+    duration.value = lastTime + 10
   }
 }
 
@@ -176,7 +184,7 @@ const progressPercent = computed(() => {
 
 // 화자 ID를 표시 이름으로 변환 (speakerMap 우선, 없으면 SPEAKER_XX → 화자XX)
 const getSpeakerDisplayName = (speakerId) => {
-  if (!speakerId) return speakerId
+  if (!speakerId) return '화자'
   if (props.speakerMap[speakerId]) return props.speakerMap[speakerId]
   return speakerId.replace(/^SPEAKER_0*(\d+)$/, (_, n) => `화자${parseInt(n) + 1}`)
 }

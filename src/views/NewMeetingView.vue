@@ -77,6 +77,11 @@ function onTranscribed(data) {
     saveForm.value.duration = Math.round(data.meta.totalDuration / 60)
   }
 
+  // 화자 분리 실패 시 토스트 알림
+  if (data?.meta?.diarizationError) {
+    showToast('화자 분리에 실패했습니다. STT 텍스트는 정상 변환되었습니다.', 'error')
+  }
+
   // 자동으로 Step 2로 이동
   currentStep.value = 2
 }
@@ -362,7 +367,8 @@ function goToStep(step) {
         </div>
       </div>
 
-      <!-- 화자 분리 옵션 -->
+      <!-- 화자 분리 옵션 (현재 미구현 — pyannote 서비스 연동 완료 후 주석 해제) -->
+      <!--
       <div class="mb-4 px-1 space-y-2">
         <label class="flex items-center gap-2 text-sm" :class="isDark ? 'text-slate-400' : 'text-slate-600'">
           <input type="checkbox" v-model="enableDiarization" class="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
@@ -381,6 +387,7 @@ function goToStep(step) {
           <span class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">명 (정확도 향상에 도움)</span>
         </div>
       </div>
+      -->
 
       <!-- 입력 컴포넌트 -->
       <LiveRecorder v-if="inputMode === 'record'" :enable-diarization="enableDiarization" :speaker-count="speakerCount" @transcribed="onTranscribed" />

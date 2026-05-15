@@ -3,6 +3,27 @@ import { transcribeAudio } from '../services/api.js'
 
 const CHUNK_INTERVAL_MS = 15_000
 
+// ── VAD (Voice Activity Detection) 튜닝 파라미터 ──
+// SILENCE_THRESHOLD: 무음 판정 기준 (dB)
+//   -35dB = 기본값 (일반 회의실 환경에 적합)
+//   -40dB = 조용한 환경 (약간 더 민감)
+//   -30dB = 소음이 있는 환경 (배경 소음을 확실히 걸러냄)
+//   값을 낮출수록 민감 (작은 소리도 음성으로 인식), 높일수록 둔감 (큰 소리만 음성으로 인식)
+const SILENCE_THRESHOLD = -35
+
+// ENERGY_CHECK_INTERVAL: 에너지 측정 주기 (ms)
+//   100ms = 기본값 (초당 10회 측정, 정확도와 성능 균형)
+//   50ms  = 더 빈번한 측정 (짧은 발화도 놓치지 않음, CPU 사용량 약간 증가)
+//   200ms = 측정 빈도 감소 (성능 우선, 아주 짧은 발화를 놓칠 수 있음)
+const ENERGY_CHECK_INTERVAL = 100
+
+// VOICE_RATIO_THRESHOLD: 청크 내 음성 프레임 비율 최소 기준 (0.0 ~ 1.0)
+//   한 청크(15초) 동안 측정된 프레임 중 이 비율 이상이 음성이어야 Whisper로 전송
+//   0.05 = 기본값 (최소 5%, 약 0.75초 이상 음성이 있어야 전송)
+//   0.02 = 더 민감 (약 0.3초 이상 음성이면 전송)
+//   0.10 = 더 엄격 (약 1.5초 이상 음성이어야 전송)
+const VOICE_RATIO_THRESHOLD = 0.05
+
 export function useSubtitleEngine() {
   const segments = ref([])
   const isListening = ref(false)
@@ -20,6 +41,13 @@ export function useSubtitleEngine() {
   const MAX_RESTARTS = 3
   let currentMimeType = 'audio/webm'
   let isSendingChunk = false
+
+  // ── VAD (Voice Activity Detection) ──
+  let audioContext = null
+  let analyserNode = null
+  let vadInterval = null
+  let voiceFrameCount = 0   // 음성이 감지된 프레임 수
+  let totalFrameCount = 0   // 전체 측정 프레임 수
 
   // ─────────────────────────────────────────────────
   // 세그먼트 조작
@@ -86,6 +114,59 @@ export function useSubtitleEngine() {
   }
 
   // ─────────────────────────────────────────────────
+  // VAD: 오디오 에너지 측정
+  // ─────────────────────────────────────────────────
+
+  function setupVAD(stream) {
+    audioContext = new (globalThis.AudioContext || globalThis.webkitAudioContext)()
+    const source = audioContext.createMediaStreamSource(stream)
+    analyserNode = audioContext.createAnalyser()
+    analyserNode.fftSize = 2048
+    source.connect(analyserNode)
+    // analyserNode을 destination에 연결하지 않음 → 스피커 출력 없이 분석만 수행
+  }
+
+  function startVADMonitor() {
+    voiceFrameCount = 0
+    totalFrameCount = 0
+    const dataArray = new Float32Array(analyserNode.fftSize)
+
+    vadInterval = setInterval(() => {
+      if (!analyserNode) return
+      analyserNode.getFloatTimeDomainData(dataArray)
+
+      // RMS(Root Mean Square)로 에너지를 dB로 변환
+      let sum = 0
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i] * dataArray[i]
+      }
+      const rms = Math.sqrt(sum / dataArray.length)
+      const dB = rms > 0 ? 20 * Math.log10(rms) : -100
+
+      totalFrameCount++
+      if (dB > SILENCE_THRESHOLD) {
+        voiceFrameCount++
+      }
+    }, ENERGY_CHECK_INTERVAL)
+  }
+
+  function stopVADMonitor() {
+    if (vadInterval) {
+      clearInterval(vadInterval)
+      vadInterval = null
+    }
+  }
+
+  function cleanupVAD() {
+    stopVADMonitor()
+    if (audioContext) {
+      audioContext.close().catch(() => {})
+      audioContext = null
+      analyserNode = null
+    }
+  }
+
+  // ─────────────────────────────────────────────────
   // Whisper 청크 전송
   // ─────────────────────────────────────────────────
 
@@ -125,7 +206,15 @@ export function useSubtitleEngine() {
       const endSec = nowSec()
       chunkStartSec = endSec
       chunkBlobs = []
-      sendChunk(blob, startSec, endSec)
+
+      // VAD: 청크 내 음성 비율이 기준 이상일 때만 Whisper로 전송
+      const voiceRatio = totalFrameCount > 0 ? voiceFrameCount / totalFrameCount : 0
+      if (voiceRatio >= VOICE_RATIO_THRESHOLD) {
+        sendChunk(blob, startSec, endSec)
+      }
+      // 다음 청크를 위해 VAD 카운터 리셋
+      voiceFrameCount = 0
+      totalFrameCount = 0
     }
 
     chunkRecorder.start()
@@ -201,10 +290,12 @@ export function useSubtitleEngine() {
     startRecognition()
 
     if (stream) {
+      setupVAD(stream)
+      startVADMonitor()
       startChunkRecorder(stream)
       chunkInterval = setInterval(() => {
         if (!chunkRecorder || chunkRecorder.state === 'inactive') return
-        chunkRecorder.stop() // onstop → sendChunk 호출
+        chunkRecorder.stop() // onstop → sendChunk 호출 (VAD 통과 시에만)
         setTimeout(() => {
           if (isListening.value && stream.active) {
             startChunkRecorder(stream)
@@ -229,6 +320,7 @@ export function useSubtitleEngine() {
     if (chunkRecorder && chunkRecorder.state !== 'inactive') {
       chunkRecorder.stop()
     }
+    cleanupVAD()
   }
 
   function clearSegments() {

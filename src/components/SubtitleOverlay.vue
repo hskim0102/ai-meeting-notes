@@ -168,6 +168,11 @@ function formatTime(sec) {
 
             <!-- 텍스트 -->
             <div class="flex-1 min-w-0">
+              <!-- 화자 라벨 (화자 분리 결과가 있을 때만 표시) -->
+              <span
+                v-if="seg.speaker"
+                class="text-[10px] font-semibold mr-1.5 px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400"
+              >{{ seg.speaker }}</span>
               <span
                 class="text-sm leading-relaxed"
                 :class="{

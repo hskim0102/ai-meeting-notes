@@ -23,6 +23,72 @@ function getOpenAI() {
   return _openai
 }
 
+// ── 무음 환각(Hallucination) 필터링 튜닝 파라미터 ──
+// Whisper verbose_json 응답의 각 세그먼트에 포함된 no_speech_prob 값 기준
+// 이 값이 높을수록 해당 구간에 실제 음성이 없을 확률이 높음
+//
+// NO_SPEECH_PROB_THRESHOLD: 환각 필터링 임계값 (0.0 ~ 1.0)
+//   0.6 = 기본값 (실제 음성은 보존하면서 명확한 무음 환각만 제거)
+//   0.5 = 약간 공격적 (환각을 더 적극적으로 제거, 작은 음성이 걸러질 수 있음)
+//   0.8 = 보수적 (거의 확실한 무음만 제거)
+//   값을 낮출수록 더 많은 세그먼트가 필터링됨, 높일수록 더 적게 필터링됨
+const NO_SPEECH_PROB_THRESHOLD = 0.6
+
+// Whisper가 무음 구간에서 반복적으로 생성하는 한국어 환각 패턴
+// 주로 YouTube 영상 엔딩 멘트가 학습 데이터에 포함되어 발생
+const HALLUCINATION_PATTERNS = [
+  /시청해\s*주셔서\s*감사/,
+  /영상은?\s*여기까지/,
+  /다음\s*영상에서\s*만나/,
+  /구독과?\s*좋아요/,
+  /좋아요와?\s*구독/,
+  /알림\s*설정/,
+  /감사합니다\s*$/,
+  /안녕히?\s*가세요/,
+  /MBC\s*뉴스/,
+  /KBS\s*뉴스/,
+  /SBS\s*뉴스/,
+]
+
+/**
+ * Whisper 응답에서 무음 환각 세그먼트를 필터링
+ * 1차: no_speech_prob이 임계값 이상인 세그먼트 제거
+ * 2차: 알려진 환각 패턴과 일치하면서 no_speech_prob이 0.1 이상인 세그먼트 제거
+ *      (패턴 매칭 + 낮은 no_speech_prob 조합으로 실제 발화를 오탐하지 않음)
+ *
+ * @param {Array} segments - Whisper 응답의 segments 배열
+ * @returns {Array} - 필터링된 segments 배열
+ */
+function filterHallucinatedSegments(segments) {
+  if (!segments?.length) return segments
+
+  const filtered = segments.filter(seg => {
+    const noSpeechProb = seg.no_speech_prob ?? 0
+    const text = seg.text.trim()
+
+    // 1차: no_speech_prob 기반 필터
+    if (noSpeechProb >= NO_SPEECH_PROB_THRESHOLD) {
+      console.log(`[Whisper 필터] 환각 제거 (no_speech_prob=${noSpeechProb.toFixed(3)}): "${text}"`)
+      return false
+    }
+
+    // 2차: 알려진 환각 패턴 + no_speech_prob이 0.3 이상인 경우에만 제거
+    //       (실제로 누군가 "감사합니다"라고 말한 경우를 오탐하지 않기 위해 이중 조건 적용)
+    if (noSpeechProb >= 0.3 && HALLUCINATION_PATTERNS.some(p => p.test(text))) {
+      console.log(`[Whisper 필터] 패턴 환각 제거 (no_speech_prob=${noSpeechProb.toFixed(3)}, 패턴 매칭): "${text}"`)
+      return false
+    }
+
+    return true
+  })
+
+  if (filtered.length < segments.length) {
+    console.log(`[Whisper 필터] ${segments.length - filtered.length}개 환각 세그먼트 제거됨`)
+  }
+
+  return filtered
+}
+
 /**
  * 단일 오디오 파일을 Whisper API로 전사(Transcription)
  *
@@ -49,6 +115,11 @@ export async function transcribeSingleFile(filePath, language = 'ko', maxRetries
         response_format: 'verbose_json',
         timestamp_granularities: ['segment'],
       })
+
+      // 무음 환각 세그먼트 필터링 적용
+      response.segments = filterHallucinatedSegments(response.segments)
+      // 필터링 후 fullText도 재구성
+      response.text = (response.segments || []).map(s => s.text.trim()).join(' ')
 
       console.log(`[Whisper] 전사 완료: ${response.segments?.length || 0}개 세그먼트`)
       return response

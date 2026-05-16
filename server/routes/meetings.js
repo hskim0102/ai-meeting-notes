@@ -30,6 +30,59 @@ function canAccessMeeting(user, participants) {
 // 회의 저장/수정 후 fire-and-forget 방식으로 호출.
 // Dify API 오류(HTTP, 타임아웃, 워크플로우 실패)만 failed로 기록.
 // Dify가 정상 응답했으나 마스킹 내용이 없는 경우는 completed로 처리.
+async function callDifyRagStreaming(meetingId, inputs, logPrefix) {
+  const ragApiKey = process.env.DIFY_RAG_AGENT_API_KEY
+  const ragApiUrl = process.env.DIFY_API_URL
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30 * 60 * 1000)
+
+  try {
+    const r = await fetch(`${ragApiUrl}/workflows/run`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${ragApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs, response_mode: 'streaming', user: 'rag-agent' }),
+      signal: controller.signal,
+    })
+
+    const reader = r.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let documentId = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const data = JSON.parse(line.slice(6))
+          if (data.event === 'workflow_finished') {
+            console.log(`[${logPrefix}] workflow_finished outputs:`, JSON.stringify(data.data?.outputs))
+            documentId = (() => { try { return JSON.parse(data.data?.outputs?.body)?.document?.id || null } catch { return null } })()
+          }
+        } catch {}
+      }
+    }
+
+    await query(
+      'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',
+      [documentId, documentId ? 'completed' : 'failed', meetingId]
+    )
+    console.log(`[${logPrefix}] 완료 — meeting_id: ${meetingId}, document_id: ${documentId}`)
+  } catch (err) {
+    await query(
+      "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
+      [err.message, meetingId]
+    )
+    console.error(`[${logPrefix}] 실패 — meeting_id: ${meetingId}:`, err.message)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function triggerMaskingAsync(meetingId, content) {
   if (!content.aiSummary) return   // AI 요약 없으면 마스킹 불필요
 
@@ -423,34 +476,7 @@ router.post('/', async (req, res) => {
       await query('INSERT INTO meeting_rag_docs (meeting_id) VALUES (?)', [meetingId])
 
       const meetingPayload = formatMeeting(newMeeting)
-      fetch(`${ragApiUrl}/workflows/run`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ragApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: 'C', document_id: '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
-          response_mode: 'blocking',
-          user: 'rag-agent',
-        }),
-      })
-        .then(async r => {
-          const body = await r.json().catch(() => ({}))
-          const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
-          await query(
-            'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',
-            [documentId, documentId ? 'completed' : 'failed', meetingId]
-          )
-          console.log(`[Dify RAG] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
-        })
-        .catch(async err => {
-          await query(
-            "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
-            [err.message, meetingId]
-          )
-          console.error(`[Dify RAG] 실패 — meeting_id: ${meetingId}:`, err.message)
-        })
+      callDifyRagStreaming(meetingId, { id: String(meetingId), gubun: 'C', document_id: '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) }, 'Dify RAG')
     }
 
     // ── 개인정보 마스킹 비동기 트리거 ──
@@ -530,35 +556,7 @@ router.put('/:id', async (req, res) => {
       )
 
       const meetingPayload = formatMeeting(updated)
-      fetch(`${ragApiUrl}/workflows/run`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${ragApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          inputs: { id: String(meetingId), gubun: existingDocumentId ? 'U' : 'C', document_id: existingDocumentId || '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) },
-          response_mode: 'blocking',
-          user: 'rag-agent',
-        }),
-      })
-        .then(async r => {
-          const body = await r.json().catch(() => ({}))
-          console.log(`[Dify RAG 응답] meeting_id: ${meetingId}`, JSON.stringify(body?.data?.outputs))
-          const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
-          await query(
-            'UPDATE meeting_rag_docs SET document_id = ?, status = ? WHERE meeting_id = ?',
-            [documentId, documentId ? 'completed' : 'failed', meetingId]
-          )
-          console.log(`[Dify RAG] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
-        })
-        .catch(async err => {
-          await query(
-            "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
-            [err.message, meetingId]
-          )
-          console.error(`[Dify RAG] 실패 — meeting_id: ${meetingId}:`, err.message)
-        })
+      callDifyRagStreaming(meetingId, { id: String(meetingId), gubun: existingDocumentId ? 'U' : 'C', document_id: existingDocumentId || '', title: meetingPayload.title, test: JSON.stringify(meetingPayload) }, 'Dify RAG')
     }
 
     // ── 개인정보 마스킹 비동기 트리거 ──
@@ -823,43 +821,7 @@ router.post('/:id/generate-rag', async (req, res) => {
       [meetingId]
     )
 
-    fetch(`${ragApiUrl}/workflows/run`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ragApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        inputs: { id: String(meetingId), gubun, document_id: existingDocumentId || '', title: meeting.title, test: JSON.stringify(meeting) },
-        response_mode: 'blocking',
-        user: 'rag-agent',
-      }),
-    })
-      .then(async r => {
-        const body = await r.json().catch(() => ({}))
-        const documentId = (() => { try { return JSON.parse(body?.data?.outputs?.body)?.document?.id || null } catch { return null } })()
-        if (documentId) {
-          await query(
-            "UPDATE meeting_rag_docs SET document_id = ?, status = 'completed', error_msg = NULL WHERE meeting_id = ?",
-            [documentId, meetingId]
-          )
-          console.log(`[Dify RAG 수동] 성공 — meeting_id: ${meetingId}, document_id: ${documentId}`)
-        } else {
-          const errMsg = body?.message || body?.data?.error || 'document_id 없음'
-          await query(
-            "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
-            [errMsg, meetingId]
-          )
-          console.error(`[Dify RAG 수동] 실패 — meeting_id: ${meetingId}:`, errMsg)
-        }
-      })
-      .catch(async err => {
-        await query(
-          "UPDATE meeting_rag_docs SET status = 'failed', error_msg = ? WHERE meeting_id = ?",
-          [err.message, meetingId]
-        )
-        console.error(`[Dify RAG 수동] 오류 — meeting_id: ${meetingId}:`, err.message)
-      })
+    callDifyRagStreaming(meetingId, { id: String(meetingId), gubun, document_id: existingDocumentId || '', title: meeting.title, test: JSON.stringify(meeting) }, 'Dify RAG 수동')
 
     res.json({ success: true, status: 'pending' })
   } catch (err) {

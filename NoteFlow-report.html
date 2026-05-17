@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoteFlow — AI 회의록 자동화 플랫폼 소개</title>
+<style>
+  /* ── 기본 리셋 ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary:   #1e40af;
+    --primary-light: #3b82f6;
+    --accent:    #0ea5e9;
+    --dark:      #0f172a;
+    --dark2:     #1e293b;
+    --gray:      #64748b;
+    --light:     #f8fafc;
+    --white:     #ffffff;
+    --green:     #10b981;
+    --amber:     #f59e0b;
+    --red:       #ef4444;
+    --purple:    #8b5cf6;
+    --border:    #e2e8f0;
+  }
+
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    background: #e5e7eb;
+    color: var(--dark);
+  }
+
+  /* ── A4 페이지 ── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 12mm;
+    background: var(--white);
+    overflow: hidden;
+    position: relative;
+    page-break-after: always;
+    box-shadow: 0 4px 24px rgba(0,0,0,.18);
+  }
+
+  /* ── 인쇄 설정 ── */
+  @media print {
+    body { background: none; }
+    .page {
+      margin: 0;
+      box-shadow: none;
+      page-break-after: always;
+    }
+    .no-print { display: none !important; }
+  }
+  @page { size: A4; margin: 0; }
+
+  /* ── 공통 헬퍼 ── */
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .justify-center { justify-content: center; }
+  .gap-2 { gap: 8px; }
+  .gap-3 { gap: 12px; }
+  .gap-4 { gap: 16px; }
+  .text-white { color: var(--white); }
+  .text-primary { color: var(--primary); }
+  .text-gray { color: var(--gray); }
+  .font-bold { font-weight: 700; }
+  .font-semibold { font-weight: 600; }
+  .rounded { border-radius: 8px; }
+  .rounded-lg { border-radius: 12px; }
+  .shadow { box-shadow: 0 2px 8px rgba(0,0,0,.10); }
+
+  /* ── 태그/배지 ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; letter-spacing: .4px;
+    padding: 3px 8px; border-radius: 20px;
+    text-transform: uppercase;
+  }
+  .badge-blue  { background: #dbeafe; color: #1d4ed8; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-amber { background: #fef3c7; color: #92400e; }
+  .badge-purple{ background: #ede9fe; color: #5b21b6; }
+
+  /* ── 스크린샷 공통 ── */
+  .screenshot {
+    width: 100%; border-radius: 8px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,.10);
+    display: block;
+  }
+  .screenshot-sm { max-height: 130px; object-fit: cover; object-position: top; }
+  .screenshot-md { max-height: 180px; object-fit: cover; object-position: top; }
+  .screenshot-lg { max-height: 230px; object-fit: cover; object-position: top; }
+  .screenshot-xl { max-height: 310px; object-fit: cover; object-position: top; }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 1 — 커버
+  ────────────────────────────────────────────────── */
+  .cover {
+    background: linear-gradient(145deg, #0f172a 0%, #1e3a8a 55%, #0369a1 100%);
+    min-height: 297mm;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 14mm 14mm 10mm;
+  }
+  .cover-logo {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .cover-logo-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, #38bdf8, #818cf8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .cover-logo-text { font-size: 24px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .cover-main {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: center; padding: 6mm 0;
+  }
+  .cover-eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 2px;
+    color: #7dd3fc; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .cover-title {
+    font-size: 36px; font-weight: 800; color: #fff;
+    line-height: 1.18; letter-spacing: -1px; margin-bottom: 12px;
+  }
+  .cover-title span { color: #38bdf8; }
+  .cover-tagline {
+    font-size: 16px; color: #bae6fd; line-height: 1.6; margin-bottom: 24px;
+  }
+  .cover-pills {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .cover-pill {
+    font-size: 11px; font-weight: 600;
+    padding: 5px 12px; border-radius: 20px;
+    background: rgba(255,255,255,.12); color: #e0f2fe; border: 1px solid rgba(255,255,255,.2);
+  }
+  .cover-screenshot-wrap {
+    border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.15);
+    box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    margin-top: 14px;
+  }
+  .cover-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid rgba(255,255,255,.12); padding-top: 10px;
+    font-size: 10px; color: #7dd3fc;
+  }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 공통 레이아웃
+  ────────────────────────────────────────────────── */
+  .page-header {
+    padding: 9mm 12mm 6mm;
+    border-bottom: 2px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .page-header-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .page-header h2 {
+    font-size: 18px; font-weight: 800; color: var(--dark); letter-spacing: -.4px;
+  }
+  .page-header p {
+    font-size: 11px; color: var(--gray); margin-top: 1px;
+  }
+  .page-body { padding: 7mm 12mm 8mm; }
+  .page-footer {
+    position: absolute; bottom: 7mm; left: 12mm; right: 12mm;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 9px; color: #94a3b8;
+    border-top: 1px solid var(--border); padding-top: 4px;
+  }
+  .logo-small { font-weight: 800; color: var(--primary); }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 2 — 문제 정의
+  ────────────────────────────────────────────────── */
+  .problem-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .problem-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; background: #f8fafc;
+  }
+  .problem-card-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: #fee2e2; color: #dc2626;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; margin-bottom: 8px;
+  }
+  .problem-card h3 { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .problem-card p { font-size: 10.5px; color: var(--gray); line-height: 1.55; }
+  .problem-card.full { grid-column: 1 / -1; }
+  .solution-bar {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    border-radius: 10px; padding: 14px 18px; color: white;
+    display: flex; align-items: flex-start; gap: 12px;
+  }
+  .solution-bar-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+  .solution-bar h3 { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .solution-bar p { font-size: 11px; line-height: 1.6; opacity: .9; }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 3 — 서비스 개요
+  ────────────────────────────────────────────────── */
+  .overview-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 14px;
+  }
+  .overview-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; text-align: center; background: #f8fafc;
+  }
+  .overview-card-icon {
+    font-size: 26px; margin-bottom: 6px;
+  }
+  .overview-card h3 { font-size: 11.5px; font-weight: 700; margin-bottom: 4px; color: var(--primary); }
+  .overview-card p { font-size: 10px; color: var(--gray); line-height: 1.5; }
+  .flow-diagram {
+    background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+    border: 1px solid #bae6fd; border-radius: 12px; padding: 14px;
+  }
+  .flow-diagram h3 { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+  .flow-steps {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;
+  }
+  .flow-step {
+    display: flex; flex-direction: column; align-items: center;
+    background: white; border-radius: 8px; padding: 8px 10px;
+    border: 1px solid #bae6fd; flex: 1; min-width: 70px; text-align: center;
+  }
+  .flow-step-icon { font-size: 18px; margin-bottom: 3px; }
+  .flow-step-label { font-size: 9.5px; font-weight: 600; color: var(--dark); }
+  .flow-arrow { color: var(--accent); font-size: 16px; font-weight: 700; flex-shrink: 0; }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 4 — 녹음 & STT
+  ────────────────────────────────────────────────── */
+  .feature-2col {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;
+  }
+  .feature-box {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; background: #f8fafc;
+  }
+  .feature-box-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .feature-box-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+  }
+  .feature-box h3 { font-size: 12px; font-weight: 700; }
+  .feature-list { list-style: none; }
+  .feature-list li {
+    font-size: 10.5px; color: var(--gray); line-height: 1.6;
+    padding: 2px 0; display: flex; gap: 5px;
+  }
+  .feature-list li::before { content: "✓"; color: var(--green); font-weight: 700; flex-shrink: 0; }
+  .spec-row {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border); padding: 5px 0;
+    font-size: 10.5px;
+  }
+  .spec-row:last-child { border-bottom: none; }
+  .spec-label { color: var(--gray); }
+  .spec-value { font-weight: 600; color: var(--dark); }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 5 — AI 요약
+  ────────────────────────────────────────────────── */
+  .ai-output-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px;
+  }
+  .ai-output-card {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 8px; text-align: center; background: #f8fafc;
+  }
+  .ai-output-card-icon { font-size: 20px; margin-bottom: 4px; }
+  .ai-output-card h3 { font-size: 10px; font-weight: 700; color: var(--primary); margin-bottom: 3px; }
+  .ai-output-card p { font-size: 9px; color: var(--gray); line-height: 1.45; }
+  .quality-banner {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border: 1px solid #86efac; border-radius: 10px; padding: 12px 14px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .quality-banner-icon { font-size: 26px; flex-shrink: 0; }
+  .quality-banner h3 { font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 5px; }
+  .quality-items { display: flex; flex-wrap: wrap; gap: 5px; }
+  .quality-item {
+    background: #fff; border: 1px solid #86efac; border-radius: 6px;
+    padding: 3px 8px; font-size: 10px; color: #166534; font-weight: 600;
+  }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 6 — 챗봇 & 검색
+  ────────────────────────────────────────────────── */
+  .search-weight-bar {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 5px;
+  }
+  .search-weight-label { font-size: 10px; color: var(--gray); width: 70px; flex-shrink: 0; }
+  .search-weight-track { flex: 1; height: 7px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .search-weight-fill { height: 100%; background: linear-gradient(90deg, var(--primary-light), var(--accent)); border-radius: 4px; }
+  .search-weight-val { font-size: 10px; font-weight: 700; color: var(--primary); width: 24px; text-align: right; }
+  .chat-example {
+    background: #f8fafc; border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; margin-bottom: 8px;
+  }
+  .chat-q {
+    font-size: 10.5px; color: var(--dark); font-weight: 600;
+    background: #dbeafe; border-radius: 6px; padding: 5px 8px; margin-bottom: 4px;
+    display: inline-block;
+  }
+  .chat-a {
+    font-size: 10px; color: var(--gray); line-height: 1.55; padding: 0 4px;
+  }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 7 — 대시보드 & 액션 아이템
+  ────────────────────────────────────────────────── */
+  .stat-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px;
+  }
+  .stat-box {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    text-align: center; background: #f8fafc;
+  }
+  .stat-box-val { font-size: 22px; font-weight: 800; color: var(--primary); }
+  .stat-box-label { font-size: 10px; color: var(--gray); margin-top: 2px; }
+  .action-status-row {
+    display: flex; gap: 8px; margin-bottom: 10px;
+  }
+  .action-status-pill {
+    flex: 1; border-radius: 8px; padding: 8px; text-align: center;
+    font-size: 10px; font-weight: 700;
+  }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 8 — 편의 기능
+  ────────────────────────────────────────────────── */
+  .convenience-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 12px;
+  }
+  .convenience-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 10px; text-align: center; background: #f8fafc;
+  }
+  .convenience-card-icon { font-size: 22px; margin-bottom: 5px; }
+  .convenience-card h3 { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+  .convenience-card p { font-size: 9.5px; color: var(--gray); line-height: 1.45; }
+  .role-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  .role-table th {
+    background: var(--primary); color: white; padding: 5px 10px;
+    text-align: left; font-size: 10px;
+  }
+  .role-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  .role-table tr:nth-child(even) td { background: #f8fafc; }
+  .check { color: var(--green); font-weight: 700; }
+  .dash { color: #cbd5e1; }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 9 — 기대 효과
+  ────────────────────────────────────────────────── */
+  .effect-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;
+  }
+  .effect-card {
+    border-radius: 10px; padding: 14px 12px; text-align: center;
+  }
+  .effect-card-num {
+    font-size: 30px; font-weight: 900; letter-spacing: -1px; margin-bottom: 4px;
+  }
+  .effect-card-label { font-size: 11px; font-weight: 700; margin-bottom: 5px; }
+  .effect-card-desc { font-size: 9.5px; line-height: 1.55; }
+  .before-after {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center;
+    background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+  }
+  .before-after-col { text-align: center; }
+  .before-after-col h4 { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
+  .before-after-col ul { list-style: none; font-size: 10px; }
+  .before-after-col ul li { padding: 2px 0; }
+  .before-col ul li { color: #dc2626; }
+  .after-col ul li { color: #059669; }
+  .before-after-arrow { font-size: 24px; color: var(--accent); font-weight: 700; }
+
+  /* ──────────────────────────────────────────────────
+     PAGE 10 — 향후 발전 방향
+  ────────────────────────────────────────────────── */
+  .roadmap-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px;
+  }
+  .roadmap-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; background: #f8fafc;
+  }
+  .roadmap-card-phase {
+    font-size: 8.5px; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .roadmap-card-icon { font-size: 18px; margin-bottom: 5px; }
+  .roadmap-card h3 { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+  .roadmap-card ul { list-style: none; }
+  .roadmap-card ul li { font-size: 9.5px; color: var(--gray); line-height: 1.55; padding: 1px 0; display: flex; gap: 4px; }
+  .roadmap-card ul li::before { content: "·"; font-weight: 700; flex-shrink: 0; }
+  .closing-banner {
+    background: linear-gradient(135deg, var(--primary), #0369a1);
+    border-radius: 12px; padding: 18px; color: white; text-align: center;
+  }
+  .closing-banner h3 { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+  .closing-banner p { font-size: 11px; opacity: .9; line-height: 1.6; }
+
+  /* ── 인쇄 버튼 ── */
+  .print-btn {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--primary); color: white;
+    border: none; border-radius: 50px; padding: 12px 24px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 4px 20px rgba(30,64,175,.4);
+    z-index: 999;
+  }
+  .print-btn:hover { background: #1d4ed8; }
+</style>
+</head>
+<body>
+
+<!-- 인쇄 버튼 -->
+<button class="print-btn no-print" onclick="window.print()">🖨 PDF로 저장</button>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 1 — 커버
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="cover">
+    <!-- 로고 -->
+    <div class="cover-logo">
+      <div class="cover-logo-icon">📝</div>
+      <span class="cover-logo-text">NoteFlow</span>
+    </div>
+
+    <!-- 메인 카피 -->
+    <div class="cover-main">
+      <div class="cover-eyebrow">AI-Powered Meeting Intelligence Platform</div>
+      <h1 class="cover-title">
+        말하는 순간,<br>
+        <span>회의록이 완성된다</span>
+      </h1>
+      <p class="cover-tagline">
+        음성 녹음부터 AI 요약, 액션 아이템 관리, 지식 축적까지<br>
+        회의의 전 과정을 자동화하는 스마트 회의록 플랫폼
+      </p>
+      <div class="cover-pills">
+        <span class="cover-pill">🎙 AI 음성 인식 (Whisper)</span>
+        <span class="cover-pill">🤖 AI 요약 (Dify Workflow)</span>
+        <span class="cover-pill">💬 AI 챗봇 Q&A</span>
+        <span class="cover-pill">🔒 개인정보 자동 마스킹</span>
+        <span class="cover-pill">📊 회의 분석 대시보드</span>
+      </div>
+
+      <!-- 대시보드 스크린샷 -->
+      <div class="cover-screenshot-wrap" style="margin-top:18px;">
+        <img src="docs/screenshots/02-dashboard.png" alt="NoteFlow 대시보드" style="width:100%; display:block; max-height:180px; object-fit:cover; object-position:top;">
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <span>NoteFlow v1.0 — AI 회의록 자동화 플랫폼</span>
+      <span>1 / 10</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 2 — 현재의 문제
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#fee2e2;">⚠️</div>
+    <div>
+      <h2>우리 조직의 회의, 이대로 괜찮을까요?</h2>
+      <p>반복되는 비효율 — 기록되지 않는 결정, 추적되지 않는 액션 아이템</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <div class="problem-card-icon">✍️</div>
+        <h3>회의록 작성 부담</h3>
+        <p>담당자가 회의에 집중하면서 동시에 기록하는 것은 현실적으로 불가능합니다. 회의가 끝난 후 기억에 의존해 작성하면 발언 내용과 결정 사항이 누락되기 쉽습니다.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-card-icon">❌</div>
+        <h3>액션 아이템 미이행</h3>
+        <p>구두로 합의한 사항은 문서로 남지 않아 담당자, 기한, 내용이 불분명해집니다. 누가 무엇을 언제까지 해야 하는지 명확히 추적되지 않아 실행력이 떨어집니다.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-card-icon">🔍</div>
+        <h3>지식 단절</h3>
+        <p>이전 회의에서 논의된 내용을 다시 찾기 위해 메신저, 이메일, 파일을 뒤지는 데 많은 시간이 낭비됩니다. 담당자 퇴직 시 조직 지식이 함께 소실됩니다.</p>
+      </div>
+      <div class="problem-card">
+        <div class="problem-card-icon">🔒</div>
+        <h3>정보보안 리스크</h3>
+        <p>회의 중 언급된 개인정보·민감 정보가 그대로 문서화되어 유출 위험이 발생합니다. 접근 제어 없이 모든 회의록이 공유되는 구조도 문제입니다.</p>
+      </div>
+      <div class="problem-card full" style="background:linear-gradient(135deg,#fff7ed,#ffedd5); border-color:#fed7aa;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-size:32px;">⏱</div>
+          <div>
+            <h3 style="font-size:13px; color:#c2410c;">시간 낭비 — 회의록 1건당 평균 30~60분 추가 소요</h3>
+            <p style="color:#9a3412;">주 5회 회의 기준, 1인당 연간 최대 <strong>200시간</strong>을 회의록 작성에 낭비합니다. 이는 약 25일치 근무 시간에 해당합니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="solution-bar">
+      <div class="solution-bar-icon">💡</div>
+      <div>
+        <h3>NoteFlow가 이 모든 문제를 해결합니다</h3>
+        <p>녹음 버튼 하나로 STT 전사 → AI 요약 → 액션 아이템 추출 → 지식 축적까지 자동화. 회의가 끝나는 순간 완성된 회의록이 준비됩니다.</p>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>현재의 문제</span>
+    <span>2 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 3 — 서비스 개요
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#dbeafe;">🏗️</div>
+    <div>
+      <h2>NoteFlow 서비스 전체 구성</h2>
+      <p>음성 입력부터 지식 자산화까지 — 9가지 핵심 기능의 통합 플랫폼</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="overview-grid">
+      <div class="overview-card">
+        <div class="overview-card-icon">🎙</div>
+        <h3>녹음 & 파일 업로드</h3>
+        <p>실시간 브라우저 녹음 또는 기존 파일 업로드. 최대 500MB, 자동 분할 처리</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">📝</div>
+        <h3>AI 음성 인식 (STT)</h3>
+        <p>OpenAI Whisper 기반 고정밀 전사. 한국어 최적화, 환각 필터링</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">🤖</div>
+        <h3>AI 회의록 자동 생성</h3>
+        <p>부서장급 수준의 구조화 요약. 결정사항·액션·키워드 자동 추출</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">✅</div>
+        <h3>액션 아이템 관리</h3>
+        <p>담당자·마감일 자동 추출. 4단계 상태 추적. 전사 통합 뷰</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">💬</div>
+        <h3>AI 챗봇 Q&A</h3>
+        <p>축적된 회의록 기반 자연어 질의. 단일/전체 회의 검색 모드</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">🔍</div>
+        <h3>통합 검색</h3>
+        <p>가중치 기반 정밀 탐색. FULLTEXT 인덱스, 고급 필터, 자동완성</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">📊</div>
+        <h3>대시보드 & 분석</h3>
+        <p>회의 트렌드, 이행률 통계, 분위기 분석, 미완료 액션 현황</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">🏢</div>
+        <h3>회의실 예약</h3>
+        <p>건물별 필터, 주간 캘린더 뷰, 실시간 가용성 확인 및 예약 관리</p>
+      </div>
+      <div class="overview-card">
+        <div class="overview-card-icon">📧</div>
+        <h3>회의록 메일 발송</h3>
+        <p>회의 후 즉시 참석자 이메일 발송. 마스킹 버전 선택 가능</p>
+      </div>
+    </div>
+
+    <div class="flow-diagram">
+      <h3>📌 사용 흐름 — 녹음에서 지식 자산까지</h3>
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="flow-step-icon">🎙</div>
+          <div class="flow-step-label">녹음/업로드</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-icon">📝</div>
+          <div class="flow-step-label">STT 전사</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-icon">✏️</div>
+          <div class="flow-step-label">키워드 교정</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-icon">🤖</div>
+          <div class="flow-step-label">AI 요약</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-icon">💾</div>
+          <div class="flow-step-label">저장 & 공유</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-step-icon">🧠</div>
+          <div class="flow-step-label">지식 축적</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>서비스 개요</span>
+    <span>3 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 4 — 녹음 & STT
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#f0fdf4;">🎙</div>
+    <div>
+      <h2>기능 1 — 음성 녹음 & AI 음성 인식 (STT)</h2>
+      <p>회의를 기록하는 가장 자연스러운 방법 — 그냥 말하면 됩니다</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div style="margin-bottom:12px;">
+      <img src="docs/screenshots/04-new-meeting-step1.png" alt="새 회의 생성" class="screenshot screenshot-md">
+    </div>
+
+    <div class="feature-2col">
+      <div class="feature-box">
+        <div class="feature-box-header">
+          <div class="feature-box-icon" style="background:#d1fae5;">🎤</div>
+          <h3>실시간 녹음</h3>
+        </div>
+        <ul class="feature-list">
+          <li>브라우저 내장 마이크로 즉시 녹음 시작</li>
+          <li>녹음 중 실시간 자막 표시 (Web Speech API)</li>
+          <li>WebM 포맷 자동 저장, 서버 보관</li>
+          <li>녹음 중단 후 STT 자동 실행</li>
+        </ul>
+      </div>
+      <div class="feature-box">
+        <div class="feature-box-header">
+          <div class="feature-box-icon" style="background:#dbeafe;">📂</div>
+          <h3>파일 업로드</h3>
+        </div>
+        <ul class="feature-list">
+          <li>MP3, MP4, WAV, WebM 등 다양한 포맷 지원</li>
+          <li>드래그앤드롭 업로드</li>
+          <li>최대 500MB — 장시간 회의도 처리 가능</li>
+          <li>25MB 초과 파일 자동 분할 & 순차 전사</li>
+        </ul>
+      </div>
+      <div class="feature-box">
+        <div class="feature-box-header">
+          <div class="feature-box-icon" style="background:#fef9c3;">🧠</div>
+          <h3>AI 음성 인식 (Whisper)</h3>
+        </div>
+        <ul class="feature-list">
+          <li>OpenAI Whisper — 세계 최고 수준의 STT 정확도</li>
+          <li>한국어 비즈니스 대화 최적화</li>
+          <li>무음 구간 환각(hallucination) 자동 필터링</li>
+          <li>화자 분리(Diarization) 선택 적용</li>
+        </ul>
+      </div>
+      <div class="feature-box">
+        <div class="feature-box-header">
+          <div class="feature-box-icon" style="background:#fae8ff;">✏️</div>
+          <h3>키워드 교정</h3>
+        </div>
+        <ul class="feature-list">
+          <li>잘못 전사된 업무 용어·인명·프로젝트명 교정</li>
+          <li>AI 키워드 자동 추출 → 사용자 확인·수정</li>
+          <li>교정 적용 시 전체 텍스트 일괄 치환</li>
+          <li>화자별 발언 타임라인 인라인 수정</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:10px 14px;">
+      <div style="display:flex; gap:20px; flex-wrap:wrap;">
+        <div class="spec-row" style="flex:1; min-width:150px;"><span class="spec-label">지원 포맷</span><span class="spec-value">MP3, MP4, WAV, WebM, M4A</span></div>
+        <div class="spec-row" style="flex:1; min-width:150px;"><span class="spec-label">최대 파일 크기</span><span class="spec-value">500 MB</span></div>
+        <div class="spec-row" style="flex:1; min-width:150px;"><span class="spec-label">자동 분할 기준</span><span class="spec-value">25 MB 초과 시</span></div>
+        <div class="spec-row" style="flex:1; min-width:150px;"><span class="spec-label">STT 언어</span><span class="spec-value">한국어 (기본), 다국어 지원</span></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>녹음 & STT</span>
+    <span>4 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 5 — AI 회의록 자동 생성
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#ede9fe;">🤖</div>
+    <div>
+      <h2>기능 2 — AI 회의록 자동 생성</h2>
+      <p>대기업 부서장급 수준의 공식 회의록 — AI가 즉시 작성합니다</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div style="margin-bottom:10px;">
+      <img src="docs/screenshots/04b-meeting-detail.png" alt="회의 상세" class="screenshot screenshot-md">
+    </div>
+
+    <div class="ai-output-grid">
+      <div class="ai-output-card">
+        <div class="ai-output-card-icon">📋</div>
+        <h3>회의 요약</h3>
+        <p>배경·논의·결정·리스크·결론 5구조, 300자 이상</p>
+      </div>
+      <div class="ai-output-card">
+        <div class="ai-output-card-icon">⚖️</div>
+        <h3>핵심 결정사항</h3>
+        <p>"무엇→어떻게→왜" 구조로 확정된 결정만 추출</p>
+      </div>
+      <div class="ai-output-card">
+        <div class="ai-output-card-icon">✅</div>
+        <h3>액션 아이템</h3>
+        <p>과제·담당자·마감일 자동 인식 및 구조화</p>
+      </div>
+      <div class="ai-output-card">
+        <div class="ai-output-card-icon">🏷️</div>
+        <h3>핵심 키워드</h3>
+        <p>5~10개 핵심 주제어, 검색 태그 자동 생성</p>
+      </div>
+      <div class="ai-output-card">
+        <div class="ai-output-card-icon">😊</div>
+        <h3>회의 분위기</h3>
+        <p>긍정적 / 부정적 / 중립적 자동 판정</p>
+      </div>
+    </div>
+
+    <div class="quality-banner">
+      <div class="quality-banner-icon">🏆</div>
+      <div>
+        <h3>AI 요약 품질 기준</h3>
+        <div class="quality-items">
+          <span class="quality-item">✓ 300자 이상 상세 요약</span>
+          <span class="quality-item">✓ 맥락-논거-결론 서술 구조</span>
+          <span class="quality-item">✓ 발화자 인용 포함</span>
+          <span class="quality-item">✓ 사실 기반 (추측 금지)</span>
+          <span class="quality-item">✓ 찬반 양측 논거 포함</span>
+          <span class="quality-item">✓ 우려사항·리스크 명시</span>
+          <span class="quality-item">✓ JSON 구조화 출력</span>
+          <span class="quality-item">✓ Dify AI Workflow 기반</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>AI 회의록 자동 생성</span>
+    <span>5 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 6 — AI 챗봇 & 통합 검색
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#fef9c3;">💬</div>
+    <div>
+      <h2>기능 3 — AI 챗봇 Q&A & 통합 검색</h2>
+      <p>과거 회의록을 언제든 자연어로 질의 — 조직의 집단 기억에 접근</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
+        <p style="font-size:10px; font-weight:600; color:var(--gray); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px;">AI 챗봇</p>
+        <img src="docs/screenshots/06-chat.png" alt="AI 챗봇" class="screenshot screenshot-lg">
+      </div>
+      <div>
+        <p style="font-size:10px; font-weight:600; color:var(--gray); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px;">통합 검색</p>
+        <img src="docs/screenshots/05-search.png" alt="통합 검색" class="screenshot screenshot-lg">
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <h3 style="font-size:12px; font-weight:700; margin-bottom:8px;">💬 챗봇 질의 예시</h3>
+        <div class="chat-example">
+          <div class="chat-q">"지난달 예산 회의에서 마케팅 관련 결정된 게 뭐야?"</div>
+          <div class="chat-a">→ AI가 관련 회의를 검색해 핵심 결정사항을 요약 답변</div>
+        </div>
+        <div class="chat-example">
+          <div class="chat-q">"OOO 프로젝트의 리스크로 뭐가 언급됐었지?"</div>
+          <div class="chat-a">→ 모든 관련 회의에서 리스크 발언을 추출해 답변</div>
+        </div>
+        <div style="background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:10px;">
+          <strong style="color:var(--primary);">두 가지 모드</strong><br>
+          <span style="color:var(--gray);">• 단일 회의 Q&A — 특정 회의 대상 (대화 이력 유지)<br>
+          • 전체 검색 Q&A — 모든 회의에서 FULLTEXT 검색 후 답변</span>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:12px; font-weight:700; margin-bottom:8px;">🔍 검색 가중치</h3>
+        <div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">회의 제목</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:100%"></div></div>
+            <span class="search-weight-val">3.0</span>
+          </div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">태그·키워드</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:83%"></div></div>
+            <span class="search-weight-val">2.5</span>
+          </div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">AI 요약</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:67%"></div></div>
+            <span class="search-weight-val">2.0</span>
+          </div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">액션 아이템</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:50%"></div></div>
+            <span class="search-weight-val">1.5</span>
+          </div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">참석자</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:50%"></div></div>
+            <span class="search-weight-val">1.5</span>
+          </div>
+          <div class="search-weight-bar">
+            <span class="search-weight-label">전사 전문</span>
+            <div class="search-weight-track"><div class="search-weight-fill" style="width:33%"></div></div>
+            <span class="search-weight-val">1.0</span>
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:9.5px; color:var(--gray); line-height:1.55; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:8px 10px;">
+          MySQL FULLTEXT 인덱스 기반 전문 검색 + 날짜·참석자·태그·분위기별 고급 필터 + 입력 즉시 자동완성 제안
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>AI 챗봇 & 통합 검색</span>
+    <span>6 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 7 — 대시보드 & 액션 아이템
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#fef3c7;">📊</div>
+    <div>
+      <h2>기능 4 — 대시보드 & 액션 아이템 통합 관리</h2>
+      <p>회의 현황을 한눈에, 할 일은 빠짐없이 추적</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+      <div>
+        <p style="font-size:10px; font-weight:600; color:var(--gray); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px;">대시보드</p>
+        <img src="docs/screenshots/02-dashboard.png" alt="대시보드" class="screenshot screenshot-lg">
+      </div>
+      <div>
+        <p style="font-size:10px; font-weight:600; color:var(--gray); margin-bottom:5px; text-transform:uppercase; letter-spacing:.5px;">액션 아이템</p>
+        <img src="docs/screenshots/07-action-items.png" alt="액션 아이템" class="screenshot screenshot-lg">
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div>
+        <h3 style="font-size:12px; font-weight:700; margin-bottom:8px;">📊 대시보드 제공 정보</h3>
+        <ul class="feature-list">
+          <li>전체 회의 수 & 이번 달 신규 회의 수</li>
+          <li>액션 아이템 전체·완료·이행률 통계</li>
+          <li>최근 회의 목록 빠른 접근</li>
+          <li>미완료 액션 아이템 우선 표시</li>
+          <li>기간별 회의 추이 차트 (Bar/Line)</li>
+          <li>참석자별·태그별 분포 분석</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="font-size:12px; font-weight:700; margin-bottom:8px;">✅ 액션 아이템 관리 기능</h3>
+        <ul class="feature-list">
+          <li>AI가 회의 발언에서 자동 추출 ("~하기로 함")</li>
+          <li>담당자, 마감일, 우선순위 자동 인식</li>
+          <li>대기 → 진행 중 → 검토 → 완료 4단계 추적</li>
+          <li>모든 회의 액션 아이템 통합 뷰</li>
+          <li>담당자별·마감일별·우선순위별 필터</li>
+          <li>체크박스 한 클릭으로 완료 처리</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>대시보드 & 액션 아이템</span>
+    <span>7 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 8 — 편의 기능
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#f0f9ff;">⚙️</div>
+    <div>
+      <h2>편의 기능 — 보안·UX·접근성 모두 고려</h2>
+      <p>실무 환경에서 바로 쓸 수 있도록 설계된 기업용 편의 기능</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="convenience-grid">
+      <div class="convenience-card">
+        <div class="convenience-card-icon">🔒</div>
+        <h3>개인정보 자동 마스킹</h3>
+        <p>주민번호·연락처 등 민감 정보 AI 자동 비식별화. 원본/마스킹본 별도 보관</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">👥</div>
+        <h3>권한 기반 접근 제어</h3>
+        <p>Admin / Manager / Member 3단계. 참석자만 자신의 회의에 접근</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">🎯</div>
+        <h3>실시간 자막</h3>
+        <p>녹음 중 발화 내용 실시간 화면 표시. 소음 환경·청각 장애 지원</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">⌨️</div>
+        <h3>커맨드 팔레트</h3>
+        <p>Ctrl+K로 전체 탐색. 마우스 없이 페이지 이동·검색 가능</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">🌙</div>
+        <h3>다크 모드</h3>
+        <p>시스템 설정 자동 감지, 수동 전환. 야간 작업 눈 피로 감소</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">📱</div>
+        <h3>반응형 UI</h3>
+        <p>PC 사이드바, 태블릿 접이식, 모바일 하단 탭 네비게이션</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">📋</div>
+        <h3>감사 로그</h3>
+        <p>모든 생성·수정·삭제 이력 기록. 컴플라이언스·내부 감사 대응</p>
+      </div>
+      <div class="convenience-card">
+        <div class="convenience-card-icon">🎵</div>
+        <h3>녹음 파일 보관</h3>
+        <p>오디오 파일 서버 보관, 원본 재청취, STT 재실행 가능</p>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <h3 style="font-size:12px; font-weight:700; margin-bottom:6px;">🔐 역할별 접근 권한</h3>
+      <table class="role-table">
+        <thead>
+          <tr>
+            <th>기능</th>
+            <th style="text-align:center">멤버 (Member)</th>
+            <th style="text-align:center">매니저 (Manager)</th>
+            <th style="text-align:center">관리자 (Admin)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>자신이 참석한 회의 조회</td>
+            <td style="text-align:center" class="check">✓</td>
+            <td style="text-align:center" class="check">✓</td>
+            <td style="text-align:center" class="check">✓</td>
+          </tr>
+          <tr>
+            <td>전체 회의 조회</td>
+            <td style="text-align:center" class="dash">—</td>
+            <td style="text-align:center" class="check">✓</td>
+            <td style="text-align:center" class="check">✓</td>
+          </tr>
+          <tr>
+            <td>회의 수정·삭제</td>
+            <td style="text-align:center" class="dash">—</td>
+            <td style="text-align:center" class="check">✓</td>
+            <td style="text-align:center" class="check">✓</td>
+          </tr>
+          <tr>
+            <td>사용자 관리·감사 로그</td>
+            <td style="text-align:center" class="dash">—</td>
+            <td style="text-align:center" class="dash">—</td>
+            <td style="text-align:center" class="check">✓</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <img src="docs/screenshots/12-settings.png" alt="설정" class="screenshot screenshot-sm">
+      <img src="docs/screenshots/08-analysis.png" alt="분석" class="screenshot screenshot-sm">
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>편의 기능</span>
+    <span>8 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 9 — 기대 효과
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#d1fae5;">📈</div>
+    <div>
+      <h2>도입 시 기대 효과</h2>
+      <p>측정 가능한 시간·품질·보안 개선 — 투자 대비 명확한 성과</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="effect-grid">
+      <div class="effect-card" style="background:#eff6ff; border:1px solid #bfdbfe;">
+        <div class="effect-card-num" style="color:var(--primary);">-80%</div>
+        <div class="effect-card-label" style="color:var(--primary);">회의록 작성 시간</div>
+        <div class="effect-card-desc" style="color:#1e40af;">30~60분 → 5~10분. 연간 1인당 80~200시간 절감. 25일치 근무 시간 확보</div>
+      </div>
+      <div class="effect-card" style="background:#f0fdf4; border:1px solid #bbf7d0;">
+        <div class="effect-card-num" style="color:#16a34a;">100%</div>
+        <div class="effect-card-label" style="color:#16a34a;">회의 집중도 향상</div>
+        <div class="effect-card-desc" style="color:#166534;">기록 걱정 없이 토론에 집중. 발언 인용·논거 포착을 AI가 대신. 의사결정 품질 향상</div>
+      </div>
+      <div class="effect-card" style="background:#fefce8; border:1px solid #fde68a;">
+        <div class="effect-card-num" style="color:#d97706;">∞</div>
+        <div class="effect-card-label" style="color:#d97706;">조직 지식 자산화</div>
+        <div class="effect-card-desc" style="color:#92400e;">모든 회의록이 검색 가능한 지식베이스로 축적. 퇴사·이직에도 지식 유실 없음</div>
+      </div>
+      <div class="effect-card" style="background:#fdf4ff; border:1px solid #e9d5ff;">
+        <div class="effect-card-num" style="color:#7c3aed;">↑3x</div>
+        <div class="effect-card-label" style="color:#7c3aed;">액션 이행률 향상</div>
+        <div class="effect-card-desc" style="color:#5b21b6;">구두 약속 → 자동 문서화. 담당자·마감일 명확화. 전사 추적으로 이행률 향상</div>
+      </div>
+      <div class="effect-card" style="background:#fff1f2; border:1px solid #fecdd3;">
+        <div class="effect-card-num" style="color:#e11d48;">🔒</div>
+        <div class="effect-card-label" style="color:#e11d48;">정보보안 강화</div>
+        <div class="effect-card-desc" style="color:#9f1239;">개인정보 자동 마스킹. 역할 기반 접근 제어. 감사 로그로 컴플라이언스 대응</div>
+      </div>
+      <div class="effect-card" style="background:#f8fafc; border:1px solid #e2e8f0;">
+        <div class="effect-card-num" style="color:var(--gray);">A+</div>
+        <div class="effect-card-label" style="color:var(--gray);">회의록 품질 일관성</div>
+        <div class="effect-card-desc" style="color:#475569;">작성자에 따른 품질 편차 제거. 공식 회의록 양식 자동 적용. 조직 기준 표준화</div>
+      </div>
+    </div>
+
+    <div class="before-after">
+      <div class="before-after-col before-col">
+        <h4 style="color:#dc2626;">❌ 도입 전</h4>
+        <ul>
+          <li>30~60분 회의록 작성 시간</li>
+          <li>기억 의존 → 내용 누락</li>
+          <li>액션 아이템 추적 불가</li>
+          <li>지식 검색 불가</li>
+          <li>개인정보 노출 리스크</li>
+        </ul>
+      </div>
+      <div class="before-after-arrow">→</div>
+      <div class="before-after-col after-col">
+        <h4 style="color:#059669;">✅ 도입 후</h4>
+        <ul>
+          <li>5~10분으로 단축</li>
+          <li>AI 자동 요약으로 완전 기록</li>
+          <li>담당자·마감일 자동 추적</li>
+          <li>자연어 챗봇으로 즉시 검색</li>
+          <li>AI 자동 마스킹 처리</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>도입 기대 효과</span>
+    <span>9 / 10</span>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     PAGE 10 — 향후 발전 방향
+══════════════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-icon" style="background:#f0f9ff;">🚀</div>
+    <div>
+      <h2>향후 발전 방향 — NoteFlow 로드맵</h2>
+      <p>현재의 완성도 위에 — 더 스마트하고, 더 연결된 회의 경험으로</p>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="roadmap-grid">
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--green);">Phase 1 · 근시일</div>
+        <div class="roadmap-card-icon">🌍</div>
+        <h3>다국어 지원</h3>
+        <ul>
+          <li>영어·일본어·중국어 STT</li>
+          <li>다국어 → 한국어 자동 번역 요약</li>
+          <li>글로벌 팀 회의 지원</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--green);">Phase 1 · 근시일</div>
+        <div class="roadmap-card-icon">📅</div>
+        <h3>캘린더 통합</h3>
+        <ul>
+          <li>Google Calendar / Outlook 연동</li>
+          <li>회의 전 관련 회의 브리핑</li>
+          <li>안건 사전 공유 기능</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--amber);">Phase 2 · 중기</div>
+        <div class="roadmap-card-icon">📹</div>
+        <h3>화상회의 연동</h3>
+        <ul>
+          <li>Zoom / Teams / WebEx 연동</li>
+          <li>실시간 자막·요약 표시</li>
+          <li>원격·현장 동시 전사</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--amber);">Phase 2 · 중기</div>
+        <div class="roadmap-card-icon">🔗</div>
+        <h3>업무 시스템 연동</h3>
+        <ul>
+          <li>Jira / Trello / Notion 연동</li>
+          <li>액션 아이템 → 티켓 자동 생성</li>
+          <li>Slack / 이메일 알림</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--purple);">Phase 3 · 장기</div>
+        <div class="roadmap-card-icon">📱</div>
+        <h3>모바일 앱</h3>
+        <ul>
+          <li>iOS / Android 네이티브 앱</li>
+          <li>이동 중 녹음 & 즉시 요약</li>
+          <li>오프라인 녹음 자동 업로드</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:var(--purple);">Phase 3 · 장기</div>
+        <div class="roadmap-card-icon">📊</div>
+        <h3>회의 품질 분석</h3>
+        <ul>
+          <li>발언 비중·편중 분석</li>
+          <li>회의 효율 점수 산정</li>
+          <li>유사 회의 반복 감지</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:#e11d48;">Phase 4 · 고도화</div>
+        <div class="roadmap-card-icon">🔐</div>
+        <h3>온프레미스 & 보안</h3>
+        <ul>
+          <li>완전 폐쇄망 배포 옵션</li>
+          <li>회의록 전자서명</li>
+          <li>법적 효력 타임스탬프</li>
+        </ul>
+      </div>
+      <div class="roadmap-card">
+        <div class="roadmap-card-phase" style="color:#e11d48;">Phase 4 · 고도화</div>
+        <div class="roadmap-card-icon">🧠</div>
+        <h3>지식 고도화</h3>
+        <ul>
+          <li>부서별 전문 용어 사전</li>
+          <li>의사결정 이력 추적</li>
+          <li>온보딩 가이드 자동 생성</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="closing-banner">
+      <h3>NoteFlow — 회의가 끝나도 인사이트는 남는다</h3>
+      <p>
+        조직의 모든 회의를 지식으로 바꾸는 AI 회의록 자동화 플랫폼<br>
+        <strong>말하는 순간, 회의록이 완성됩니다</strong>
+      </p>
+    </div>
+
+  </div>
+  <div class="page-footer">
+    <span class="logo-small">NoteFlow</span>
+    <span>향후 발전 방향</span>
+    <span>10 / 10</span>
+  </div>
+</div>
+
+</body>
+</html>

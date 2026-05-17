@@ -7,9 +7,43 @@
 
 import { Router } from 'express'
 import nodemailer from 'nodemailer'
+import { Marked } from 'marked'
 import { query } from '../services/database.js'
 import { maskPersonalInfo } from '../services/difyService.js'
 import { optionalAuth } from '../middleware/authMiddleware.js'
+
+// 이메일용 마크다운 → HTML 변환 (인라인 스타일 적용, marked v18 Marked 인스턴스)
+const _emailMarked = new Marked({
+  breaks: true,
+  renderer: {
+    heading(token) {
+      const sizes = { 1: '18px', 2: '16px', 3: '15px' }
+      const sz = sizes[token.depth] || '14px'
+      const border = token.depth <= 2 ? 'border-bottom:1px solid #e2e8f0;padding-bottom:6px;' : ''
+      const inner = this.parser.parseInline(token.tokens)
+      return `<h${token.depth} style="font-size:${sz};color:#1e293b;margin:16px 0 6px;${border}">${inner}</h${token.depth}>`
+    },
+    paragraph(token) {
+      const inner = this.parser.parseInline(token.tokens)
+      return `<p style="font-size:14px;line-height:1.75;color:#475569;margin:6px 0;">${inner}</p>`
+    },
+    list(token) {
+      const tag = token.ordered ? 'ol' : 'ul'
+      const inner = token.items.map(item => {
+        const content = this.parser.parse(item.tokens, !!item.loose)
+        return `<li style="font-size:14px;line-height:1.7;color:#475569;margin-bottom:4px;">${content.trim()}</li>`
+      }).join('')
+      return `<${tag} style="padding-left:20px;margin:6px 0;">${inner}</${tag}>`
+    },
+    strong(token) {
+      return `<strong style="color:#1e293b;">${token.text}</strong>`
+    },
+    hr() {
+      return `<hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">`
+    },
+  },
+})
+const mdToHtml = (text) => text ? _emailMarked.parse(text) : ''
 
 const router = Router()
 
@@ -718,7 +752,7 @@ router.post('/:id/send-email', async (req, res) => {
         </div>
         <div style="background:white;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
           <h3 style="font-size:15px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:8px;">AI 요약</h3>
-          <p style="font-size:14px;line-height:1.7;color:#475569;">${meeting.aiSummary || '(요약 없음)'}</p>
+          <div style="font-size:14px;line-height:1.75;color:#475569;">${mdToHtml(meeting.aiSummary) || '<p style="color:#94a3b8;">(요약 없음)</p>'}</div>
 
           ${decisionsHtml ? `
           <h3 style="font-size:15px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-top:20px;">주요 결정사항</h3>

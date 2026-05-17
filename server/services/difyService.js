@@ -143,7 +143,7 @@ export async function summarizeWithDify(transcript) {
     }
 
     // ── 7단계: Dify 응답을 프론트엔드 렌더링에 적합한 구조로 변환 ──
-    const structured = parseWorkflowOutput(result)
+    const structured = parseWorkflowOutput(result, transcript)
 
     const summaryPreview = typeof structured.summary === 'string'
       ? structured.summary.substring(0, 50)
@@ -195,20 +195,32 @@ export async function summarizeWithDify(transcript) {
  * @param {object} difyResponse - Dify API 원본 응답
  * @returns {object} - 구조화된 요약 결과
  */
-function parseWorkflowOutput(difyResponse) {
+function parseWorkflowOutput(difyResponse, transcript = '') {
   const outputs = difyResponse?.data?.outputs || {}
 
+  // Dify가 sentiment를 반환하지 않거나 'neutral'이면 로컬 분석으로 보완
+  const resolveSentiment = (raw) => {
+    const s = (raw || '').toLowerCase().trim()
+    if (s === 'positive' || s === 'negative') return s
+    // 'neutral' 이거나 빈값이면 키워드 분석으로 재판정
+    return analyzeSentimentFromText(transcript)
+  }
+
   // ── 전략 1: outputs.result가 JSON 문자열인 경우 ──
-  // Dify 워크플로우에서 LLM 출력을 하나의 "result" 필드로 내보내는 경우
   if (outputs.result && typeof outputs.result === 'string') {
+    // 마크다운 코드블록 래핑 제거 (Dify LLM이 ```json ... ``` 로 감쌀 때)
+    const cleaned = outputs.result
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim()
     try {
-      const parsed = JSON.parse(outputs.result)
+      const parsed = JSON.parse(cleaned)
       return {
         summary: ensureString(parsed.summary || parsed.tldr || parsed.tl_dr || ''),
         actionItems: normalizeActionItems(parsed.action_items || parsed.actionItems || parsed.actions || []),
         keywords: normalizeArray(parsed.keywords || parsed.tags || []),
         keyDecisions: normalizeArray(parsed.key_decisions || parsed.keyDecisions || parsed.decisions || []),
-        sentiment: parsed.sentiment || parsed.mood || 'neutral',
+        sentiment: resolveSentiment(parsed.sentiment || parsed.mood),
         raw: difyResponse,
       }
     } catch {
@@ -218,14 +230,13 @@ function parseWorkflowOutput(difyResponse) {
         actionItems: [],
         keywords: [],
         keyDecisions: [],
-        sentiment: 'neutral',
+        sentiment: analyzeSentimentFromText(transcript),
         raw: difyResponse,
       }
     }
   }
 
   // ── 전략 2: outputs에 개별 필드가 있는 경우 ──
-  // Dify 워크플로우에서 각 출력을 별도 변수로 내보내는 경우
   return {
     summary: ensureString(outputs.summary || outputs.tldr || outputs.tl_dr || outputs.text || ''),
     actionItems: normalizeActionItems(
@@ -244,7 +255,7 @@ function parseWorkflowOutput(difyResponse) {
       tryParseJSON(outputs.decisions) ||
       []
     ),
-    sentiment: outputs.sentiment || outputs.mood || 'neutral',
+    sentiment: resolveSentiment(outputs.sentiment || outputs.mood),
     raw: difyResponse,
   }
 }
@@ -318,6 +329,52 @@ function tryParseJSON(value) {
   } catch {
     return value
   }
+}
+
+/**
+ * 전사 텍스트를 키워드 빈도 기반으로 분석하여 회의 분위기 판정
+ * Dify가 sentiment를 반환하지 않거나 'neutral'로만 응답할 때 fallback으로 사용
+ *
+ * @param {string} text - 회의 전사 텍스트
+ * @returns {'positive'|'negative'|'neutral'}
+ */
+function analyzeSentimentFromText(text) {
+  if (!text || typeof text !== 'string' || text.trim().length === 0) return 'neutral'
+
+  const positivePatterns = [
+    /좋[아았아요습]/g, /훌륭/g, /동의/g, /찬성/g, /성공/g, /달성/g, /완료/g,
+    /감사/g, /기대/g, /협력/g, /적극/g, /발전/g, /개선/g, /효과적/g,
+    /원활/g, /순조/g, /긍정/g, /만족/g, /축하/g, /진전/g, /해결/g,
+    /도움/g, /수고/g, /잘 됐/g, /잘됐/g, /파이팅/g, /화이팅/g,
+    /잘 되/g, /잘되/g, /좋습니다/g, /훌륭합니다/g, /탁월/g, /뛰어/g,
+  ]
+
+  const negativePatterns = [
+    /문제/g, /어렵/g, /반대/g, /실패/g, /우려/g, /걱정/g, /힘들/g,
+    /불만/g, /갈등/g, /이의/g, /지연/g, /차질/g, /좌절/g, /비판/g,
+    /충돌/g, /부정/g, /리스크/g, /위험/g, /장애/g, /난항/g,
+    /안 됩/g, /못 하/g, /불가능/g, /안됩/g, /못합니/g,
+    /질책/g, /책임/g, /실망/g, /부족/g, /미흡/g, /안타깝/g,
+    /어렵습니/g, /힘드/g, /안되/g, /못되/g,
+  ]
+
+  let positiveScore = 0
+  let negativeScore = 0
+
+  for (const pattern of positivePatterns) {
+    const matches = text.match(pattern)
+    if (matches) positiveScore += matches.length
+  }
+  for (const pattern of negativePatterns) {
+    const matches = text.match(pattern)
+    if (matches) negativeScore += matches.length
+  }
+
+  if (positiveScore === 0 && negativeScore === 0) return 'neutral'
+  // 한쪽이 1.5배 이상 우세할 때만 해당 분위기로 판정
+  if (positiveScore >= negativeScore * 1.5) return 'positive'
+  if (negativeScore >= positiveScore * 1.5) return 'negative'
+  return 'neutral'
 }
 
 // ─────────────────────────────────────────────────

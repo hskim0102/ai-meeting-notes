@@ -15,10 +15,10 @@ let pool = null
 export function getPool() {
   if (!pool) {
     pool = mysql.createPool({
-      host: process.env.DB_HOST || '127.0.0.1',
-      port: parseInt(process.env.DB_PORT || '30306', 10),
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'root',
+      host: process.env.DB_HOST || '112.172.10.200',
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      user: process.env.DB_USER || 'meetings_user',
+      password: process.env.DB_PASSWORD || 'Shinhan@2',
       database: process.env.DB_NAME || 'meetings',
       waitForConnections: true,
       connectionLimit: 10,

@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+# ffmpeg/ffprobe 바이너리 설치 (오디오 분할 및 메타데이터 분석용)
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 COPY package*.json ./

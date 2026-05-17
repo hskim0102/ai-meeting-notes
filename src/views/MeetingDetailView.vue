@@ -344,8 +344,10 @@ function confirmMaskChoice(useMasking) {
 }
 
 // ── 메일 발송 모달 열기 ──
+// 마스킹 처리 부분을 체크하지 않고 원본 그대로 메일 발송 (마스킹 기능 미동작으로 임시 우회)
 function openEmailModal() {
-  checkMaskAndShow('email')
+  emailForm.useMasking = false
+  openEmailModalDirect()
 }
 
 function openEmailModalDirect() {
@@ -407,10 +409,16 @@ function showToast(message, type = 'success') {
 }
 
 // ── Word(.doc) 다운로드 ──
-// 마스킹 상태를 먼저 확인하고 다이얼로그를 통해 마스킹/원본 선택 후 다운로드
+// 마스킹 처리 부분을 체크하지 않고 원본 그대로 다운로드 (마스킹 기능 미동작으로 임시 우회)
 function downloadWord() {
   if (!meeting.value) return
-  checkMaskAndShow('download')
+  try {
+    exportMeetingToWord(meeting.value)
+    showToast('Word 문서를 다운로드했습니다.', 'success')
+  } catch (err) {
+    console.error('[Word 다운로드 오류]', err)
+    showToast(`다운로드 실패: ${err.message}`, 'error')
+  }
 }
 
 const formatDuration = (min) => {
@@ -772,6 +780,8 @@ const sentimentColor = computed(() => {
               마스킹 적용 중
             </span>
           </div>
+          <!-- 마스킹 보기 버튼 (기능 오류로 임시 숨김) -->
+          <!--
           <button
             @click="toggleTranscriptMask"
             :disabled="transcriptMaskLoading"
@@ -785,6 +795,7 @@ const sentimentColor = computed(() => {
             </svg>
             {{ transcriptMaskLoading ? '로딩 중...' : (transcriptMaskMode ? '원본 보기' : '마스킹 보기') }}
           </button>
+          -->
         </div>
         <!-- 화자 분리 타임라인 -->
         <SpeakerTimeline

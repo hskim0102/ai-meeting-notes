@@ -49,7 +49,7 @@ const navGroups = [
     label: '기타',
     items: [
       { name: '회의실 예약', path: '/rooms', icon: 'rooms', shortcut: '' },
-      { name: 'AI 챗봇', path: '/chat', icon: 'chat', shortcut: '' },
+      // { name: 'AI 챗봇', path: '/chat', icon: 'chat', shortcut: '' }, // 기능 미동작으로 임시 숨김
     ],
   },
 ]

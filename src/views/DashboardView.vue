@@ -319,7 +319,8 @@ const formatDuration = (min) => {
       </div>
     </div>
 
-    <!-- 진행 중인 회의 배너 -->
+    <!-- 진행 중인 회의 배너 (미사용 기능으로 임시 숨김) -->
+    <!--
     <div
       v-if="!loading && liveMeeting"
       class="mb-8 rounded-xl p-4 border"
@@ -349,6 +350,7 @@ const formatDuration = (min) => {
         </router-link>
       </div>
     </div>
+    -->
 
     <!-- 2-Column Layout: 오늘의 일정 + 긴급 액션아이템 -->
     <div class="grid grid-cols-2 gap-6 mb-8">

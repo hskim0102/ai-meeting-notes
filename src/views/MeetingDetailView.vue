@@ -559,8 +559,8 @@ const sentimentColor = computed(() => {
   </div>
 
   <div class="p-8" v-else-if="meeting">
-    <!-- 실시간 협업 인디케이터 -->
-    <CollaborationIndicator :meeting-id="meeting.id" />
+    <!-- 실시간 협업 인디케이터 (미사용 기능으로 임시 숨김) -->
+    <!-- <CollaborationIndicator :meeting-id="meeting.id" /> -->
 
     <!-- Back button -->
     <button @click="router.back()" class="flex items-center gap-1.5 text-sm mb-6 transition-colors" :class="isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700'">

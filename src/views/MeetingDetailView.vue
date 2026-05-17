@@ -684,7 +684,8 @@ const sentimentColor = computed(() => {
           취소
         </button>
       </template>
-      <!-- [임시] RAG 수동 생성 버튼 — 기존 회의록 document_id 채우기 완료 후 삭제 예정 -->
+      <!-- [임시] RAG 수동 생성 버튼 (기능 미동작으로 임시 숨김) -->
+      <!--
       <button
         @click="generateRag"
         :disabled="generatingRag"
@@ -696,6 +697,7 @@ const sentimentColor = computed(() => {
         </svg>
         {{ generatingRag ? 'RAG 생성 중...' : '[임시] RAG 생성' }}
       </button>
+      -->
 
       <!-- Word 다운로드 -->
       <button
